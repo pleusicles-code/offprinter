@@ -24,7 +24,6 @@ DEFAULT_MODEL = "gpt-5.4-mini"
 class ReviewedWork(BaseModel):
     author: str | None
     title: str | None
-    year: str | None
     publication_place: str | None
     publisher: str | None
 
@@ -39,7 +38,6 @@ class Metadata(BaseModel):
     year: str | None
     offprint_year: str | None
     pages: str | None
-    publication_date: str | None
     publication_place: str | None
     publisher: str | None
     doi: str | None
@@ -246,8 +244,8 @@ def extract(client, model, prompt, box, images):
 
 HEADERS = [
     "Box", "Photograph 1", "Photograph 2", "Author", "Title",
-    "Type", "Publication", "Volume", "Issue", "Year", "Original year",
-    "Offprint year", "Pages", "Publication date", "Place", "Publisher",
+    "Type", "Publication", "Volume", "Issue", "Year",
+    "Offprint year", "Pages", "Place", "Publisher",
     "DOI", "Contributors", "Reviewed work", "Handwriting",
     "Handwriting type", "Handwriting text", "Handwriting notes",
     "Needs review", "Review reason", "Model", "Processed at",
@@ -270,14 +268,13 @@ def export_xlsx(records, outfile):
         work = item.get("reviewed_work") or {}
         if not isinstance(work, dict):
             work = {}
-        book = "; ".join(str(work[k]) for k in ("author", "title", "year") if work.get(k))
+        book = "; ".join(str(work[k]) for k in ("author", "title") if work.get(k))
         usage = item.get("processing") or {}
         row = [
             box, images[0] if images else None, images[1] if len(images) > 1 else None,
             item.get("author"), item.get("title"), item.get("publication_type"),
             item.get("publication"), item.get("volume"), item.get("issue"),
-            item.get("year") or item.get("offprint_year"), item.get("year"),
-            item.get("offprint_year"), item.get("pages"), item.get("publication_date"),
+            item.get("year"), item.get("offprint_year"), item.get("pages"),
             item.get("publication_place"), item.get("publisher"), item.get("doi"),
             item.get("contributors"), book, item.get("handwriting"),
             item.get("handwriting_type"), item.get("handwriting_text"),
