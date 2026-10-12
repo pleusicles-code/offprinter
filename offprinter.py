@@ -227,12 +227,12 @@ def normalize_pages(value):
 def estimate_cost(item):
     usage = item.get("processing") or {}
     if isinstance(usage.get("cost_huf"), (int, float)):
-        return usage["cost_huf"]
+        return round(usage["cost_huf"], 1)
     i, o = usage.get("input_tokens"), usage.get("output_tokens")
     if usage.get("model") != DEFAULT_MODEL or not isinstance(i, int) or not isinstance(o, int):
         return None
     return round((i * GPT54_MINI_INPUT_USD_PER_MILLION
-                  + o * GPT54_MINI_OUTPUT_USD_PER_MILLION) * HUF_PER_USD / 1_000_000, 4)
+                  + o * GPT54_MINI_OUTPUT_USD_PER_MILLION) * HUF_PER_USD / 1_000_000, 1)
 
 
 def normalize_author_fields(author, normalized):
@@ -298,7 +298,7 @@ def extract(client, model, reasoning, prompt, box, images):
             input_tokens * GPT54_MINI_INPUT_USD_PER_MILLION
             + output_tokens * GPT54_MINI_OUTPUT_USD_PER_MILLION
         ) / 1_000_000
-        cost_huf = round(cost_usd * HUF_PER_USD, 4)
+        cost_huf = round(cost_usd * HUF_PER_USD, 1)
     data["processing"] = {
         "model": model,
         "reasoning": reasoning,
@@ -396,12 +396,12 @@ def export_xlsx(records, outfile):
     for box, count in sorted(summary.items()):
         v = summary_stats[box]
         stats.append([box, count, v["single"], v["double"], v["review"],
-                      v["handwriting"], v["missing_date"], round(v["cost"], 2), v["priced"]])
+                      v["handwriting"], v["missing_date"], round(v["cost"], 1), v["priced"]])
         for k in total:
             total[k] += v[k]
     stats.append(["TOTAL", len(records), total["single"], total["double"],
                   total["review"], total["handwriting"], total["missing_date"],
-                  round(total["cost"], 2), total["priced"]])
+                  round(total["cost"], 1), total["priced"]])
     for cell in stats[1]:
         cell.fill = PatternFill("solid", fgColor="23445A")
         cell.font = Font(bold=True, color="FFFFFF")
@@ -413,9 +413,9 @@ def export_xlsx(records, outfile):
             for cell in row:
                 cell.border = Border(bottom=Side(style="hair", color="CDD5DD"))
     for row in stats.iter_rows(min_row=2, min_col=8, max_col=8):
-        row[0].number_format = '#,##0.00 "Ft"'
+        row[0].number_format = '#,##0.0 "Ft"'
     for row in sh.iter_rows(min_row=2, min_col=len(HEADERS), max_col=len(HEADERS)):
-        row[0].number_format = '0.0000 "Ft"'
+        row[0].number_format = '0.0 "Ft"'
     wb.save(outfile)
 
 def main():
