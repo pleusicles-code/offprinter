@@ -6,3 +6,7 @@ Box[0-9][0-9][0-9]/
 BOX-[0-9][0-9][0-9]/
 offprints_*.xlsx
 *.json.bak
+.venv/
+*.jpg.bak
+*.jpeg.bak
+*.offprinter-tmp*
