@@ -15,4 +15,13 @@ NORMALIZATION OF NUMERIC FIELDS: For volume and issue, return Arabic numerals re
 
 AUTHOR SCRIPT AND CASE: Normalize names printed in ALL CAPS to ordinary name capitalization, preserving genuine diacritics and established spelling: "MARÓT KÁROLY" -> "Marót Károly". Use Latin characters for names in Latin-script languages (Hungarian, German, etc.), even when visually similar Greek letters appear through OCR confusion. For example, "K. ΜΑΡΌΤ" is "K. Marót" (Greek Μ Α Ρ Ο Τ are not appropriate here). Conversely, preserve genuine Greek script for names actually printed in Greek and never indiscriminately transliterate them. Preserve initials and printed name order; never expand initials without evidence.
 
+
+STRICT EVIDENCE RULE (CRITICAL): This task is transcription/cataloguing, NOT bibliographic completion. Never fill fields from memory, prior knowledge, plausible guesses, familiarity with a publication, or dates found in unrelated text. When a field is not explicitly supported by an appropriate visible printed bibliographic statement, output null. It is much better to leave year/pages null than to fabricate a plausible value.
+
+YEAR: Supply year or offprint_year ONLY when a date is explicitly printed as the publication date in the heading, colophon, title page, wrapper, or clear source citation identifying THIS offprint. Dates in the body text, footnotes, cited bibliography, dedications, or handwritten notes are NOT publication dates. Do not estimate a year from typography, cited literature, authors' lifetimes, or historical context.
+
+PAGES: Supply a page range ONLY when supported by explicit PRINTED pagination or a printed bibliographic citation. Do not infer it from the number of photographed pages, the article's section numbers, or marginal handwritten marks. Handwritten numbers such as "1–27" or "1–24" may be shelf, ordering, or personal annotations: record their presence in handwriting_notes if helpful, but NEVER use them as pages or volume/issue numbers. A printed page number on just one photographed page usually does not establish a complete page range. In such cases pages is null.
+
+Before returning, check every non-null year, offprint_year, pages, volume and issue: is there direct, unambiguous visible printed evidence that the number describes THAT bibliographic field? If not, set it to null. Missing such optional data does not trigger needs_review if the item itself is otherwise identifiable.
+
 Return exactly one record conforming to the provided JSON schema.
