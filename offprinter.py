@@ -240,7 +240,7 @@ def normalize_author_fields(author, normalized):
     def fix_spelling(value):
         if not isinstance(value, str):
             return value
-        return re.sub(r"(?i)\bRitók\b", lambda m: (
+        return re.sub(r"(?i)\b(?:Ritók|Ritóók)\b", lambda m: (
             "RITOÓK" if m.group().isupper() else
             "ritoók" if m.group().islower() else "Ritoók"
         ), value)
