@@ -62,4 +62,4 @@ XLSX export in the parent directory produces offprints_YYYYMMDD_HHMMSS.xlsx with
 
 This is a public repository. Box folders, credentials, and generated workbooks are ignored by Git. Do not override these exclusions when committing data. The API key is read from ../.openai_api_key and is never deliberately placed in JSON or workbook output.
 
-OpenAI API usage is billed separately from ChatGPT subscriptions.
+Each newly processed GPT-5.4 mini JSON record includes `processing.cost_huf`, calculated at a fixed 330 HUF/USD using $0.75 per million input tokens and $4.50 per million output tokens. This is an estimate based on reported total tokens and does not apply alternative model prices or cached-input discounts; if another model is selected, `cost_huf` is null. Existing JSON files are not retroactively updated.\n\nOpenAI API usage is billed separately from ChatGPT subscriptions.
