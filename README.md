@@ -10,15 +10,15 @@ Local Python pipeline for cataloguing scholarly offprints from phone photographs
     source .venv/bin/activate
     pip install -r requirements.txt
 
-Create .openai_api_key in the repository root. The file must contain only your OpenAI API key, without quotes. Run:
+Create .openai_api_key in the **parent directory** of the repository (beside the Box folders). The file must contain only your OpenAI API key, without quotes. Run:
 
     chmod 600 .openai_api_key
 
-Do not commit the key or share it. It is included in .gitignore.
+Do not commit the key or share it. It is outside the Git repository, so it cannot accidentally be added to a commit from this repository.
 
 ## Image layout
 
-    Box001/
+    ../Box001/
         first.jpg
         first.json           # written automatically
         next.jpg
@@ -26,10 +26,10 @@ Do not commit the key or share it. It is included in .gitignore.
             first-part.jpg
             second-part.jpg
             first-part.json  # written automatically
-    Box002/
+    ../Box002/
         ...
 
-Each photograph directly in a box is one offprint. Photographs in double/ are sorted by natural numeric filename order and interpreted in consecutive pairs. An odd number of photographs causes an error.
+The script and prompt.txt stay inside the offprinter repository; the API key, Box folders and exported Excel workbooks live one directory above it. Each photograph directly in a box is one offprint. Photographs in double/ are sorted by natural numeric filename order and interpreted in consecutive pairs. An odd number of photographs causes an error.
 
 ## Commands
 
@@ -56,10 +56,10 @@ One validated JSON is stored next to each offprint's first image. When forcing r
 
 The original publication year is stored as year. offprint_year is used only when the original year is unknown. needs_review refers exclusively to bibliographic identification, never handwritten notes.
 
-XLSX export produces offprints_YYYYMMDD_HHMMSS.xlsx with Catalogue and Summary worksheets and photo hyperlinks. Those hyperlinks use absolute local file paths and may need regeneration if files are moved. XLSX generation does not call the API.
+XLSX export in the parent directory produces offprints_YYYYMMDD_HHMMSS.xlsx with Catalogue and Summary worksheets and photo hyperlinks. Those hyperlinks use absolute local file paths and may need regeneration if files are moved. XLSX generation does not call the API.
 
 ## Security
 
-This is a public repository. Box folders, credentials, and generated workbooks are ignored by Git. Do not override these exclusions when committing data. The API key is read from .openai_api_key and is never deliberately placed in JSON or workbook output.
+This is a public repository. Box folders, credentials, and generated workbooks are ignored by Git. Do not override these exclusions when committing data. The API key is read from ../.openai_api_key and is never deliberately placed in JSON or workbook output.
 
 OpenAI API usage is billed separately from ChatGPT subscriptions.
