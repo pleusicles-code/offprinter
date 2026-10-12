@@ -235,6 +235,25 @@ def estimate_cost(item):
                   + o * GPT54_MINI_OUTPUT_USD_PER_MILLION) * HUF_PER_USD / 1_000_000, 4)
 
 
+def normalize_author_fields(author, normalized):
+    """Fix the Ritoók spelling and avoid commas in unchanged Hungarian name order."""
+    def fix_spelling(value):
+        if not isinstance(value, str):
+            return value
+        return re.sub(r"(?i)\bRitók\b", lambda m: (
+            "RITOÓK" if m.group().isupper() else
+            "ritoók" if m.group().islower() else "Ritoók"
+        ), value)
+
+    author = fix_spelling(author)
+    normalized = fix_spelling(normalized)
+    if isinstance(author, str) and isinstance(normalized, str):
+        # Remove only one comma, and only if that reproduces the printed name exactly.
+        if normalized.count(",") == 1 and normalized.replace(",", "").split() == author.split():
+            normalized = normalized.replace(",", "", 1).strip()
+    return author, normalized
+
+
 def extract(client, model, reasoning, prompt, box, images):
     content = [{"type": "input_text", "text": prompt}]
     content.extend(image_content(p) for p in images)
@@ -248,6 +267,8 @@ def extract(client, model, reasoning, prompt, box, images):
     if response.output_parsed is None:
         raise RuntimeError("Model did not return a structured bibliographic record")
     data = response.output_parsed.model_dump()
+    data["author"], data["author_normalized"] = normalize_author_fields(
+        data.get("author"), data.get("author_normalized"))
     if data["handwriting"] not in {"Yes", "No", "Uncertain"}:
         raise ValueError("Invalid handwriting status")
     for field in ("volume", "issue"):
@@ -320,16 +341,18 @@ def export_xlsx(records, outfile):
             work = {}
         book = "; ".join(str(work[k]) for k in ("author", "title") if work.get(k))
         usage = item.get("processing") or {}
+        author, author_normalized = normalize_author_fields(
+            item.get("author"), item.get("author_normalized"))
         row = [
             box, images[0] if images else None, images[1] if len(images) > 1 else None,
-            item.get("author"), item.get("title"), item.get("publication"), item.get("volume"), item.get("issue"),
+            author, item.get("title"), item.get("publication"), item.get("volume"), item.get("issue"),
             item.get("year"), item.get("offprint_year"), normalize_pages(item.get("pages")),
             item.get("publication_place"), item.get("publisher"), item.get("doi"),
             item.get("contributors"), book, item.get("handwriting"),
             item.get("handwriting_type"), item.get("handwriting_text"),
             item.get("handwriting_notes"), "Yes" if item.get("needs_review") else "No",
             item.get("review_reason"), usage.get("model"), usage.get("processed_at"),
-            item.get("author_normalized"), estimate_cost(item),
+            author_normalized, estimate_cost(item),
         ]
         sh.append(row)
         current = sh.max_row
