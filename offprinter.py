@@ -302,7 +302,7 @@ HEADERS = [
 
 def export_xlsx(records, outfile):
     from openpyxl import Workbook
-    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
     from openpyxl.utils import get_column_letter
 
     wb = Workbook()
@@ -310,6 +310,7 @@ def export_xlsx(records, outfile):
     sh.title = "Catalogue"
     sh.append(HEADERS)
     summary = Counter()
+    summary_stats = {}
     for path, item in records:
         box = item.get("box") or (path.parent.parent.name if path.parent.name == "double" else path.parent.name)
         images = item.get("images") or []
@@ -338,6 +339,16 @@ def export_xlsx(records, outfile):
                 cell.hyperlink = (ROOT / box / relative_path).resolve().as_uri()
                 cell.style = "Hyperlink"
         summary[box] += 1
+        v = summary_stats.setdefault(box, {"single": 0, "double": 0, "review": 0, "handwriting": 0,
+                                            "missing_date": 0, "cost": 0.0, "priced": 0})
+        v["double" if len(images) == 2 else "single"] += 1
+        v["review"] += bool(item.get("needs_review"))
+        v["handwriting"] += (item.get("handwriting") == "Yes")
+        v["missing_date"] += not bool(item.get("year") or item.get("offprint_year"))
+        price = estimate_cost(item)
+        if price is not None:
+            v["cost"] += price
+            v["priced"] += 1
     sh.freeze_panes = "A2"
     sh.auto_filter.ref = sh.dimensions
     sh.sheet_view.showGridLines = False
@@ -354,16 +365,33 @@ def export_xlsx(records, outfile):
         )
 
     stats = wb.create_sheet("Summary")
-    stats.append(["Box", "Records"])
+    cols = ["Box", "Records", "Single", "Double", "Needs review", "Handwriting yes",
+            "Missing date", "Cost HUF", "Priced items"]
+    stats.append(cols)
+    total = {k: 0 for k in ("single", "double", "review", "handwriting", "missing_date", "cost", "priced")}
     for box, count in sorted(summary.items()):
-        stats.append([box, count])
-    stats.append(["TOTAL", len(records)])
+        v = summary_stats[box]
+        stats.append([box, count, v["single"], v["double"], v["review"],
+                      v["handwriting"], v["missing_date"], round(v["cost"], 2), v["priced"]])
+        for k in total:
+            total[k] += v[k]
+    stats.append(["TOTAL", len(records), total["single"], total["double"],
+                  total["review"], total["handwriting"], total["missing_date"],
+                  round(total["cost"], 2), total["priced"]])
     for cell in stats[1]:
         cell.fill = PatternFill("solid", fgColor="23445A")
         cell.font = Font(bold=True, color="FFFFFF")
-    stats.column_dimensions["A"].width = 19
-    stats.column_dimensions["B"].width = 15
+    for j in range(1, len(cols) + 1):
+        stats.column_dimensions[get_column_letter(j)].width = 21
     stats.freeze_panes = "A2"
+    for sheet in (sh, stats):
+        for row in sheet.iter_rows(min_row=2):
+            for cell in row:
+                cell.border = Border(bottom=Side(style="hair", color="CDD5DD"))
+    for row in stats.iter_rows(min_row=2, min_col=8, max_col=8):
+        row[0].number_format = '#,##0.00 "Ft"'
+    for row in sh.iter_rows(min_row=2, min_col=len(HEADERS), max_col=len(HEADERS)):
+        row[0].number_format = '0.0000 "Ft"'
     wb.save(outfile)
 
 def main():
