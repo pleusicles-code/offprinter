@@ -168,6 +168,52 @@ def write_json_atomic(path, data, backup):
         tmp.unlink(missing_ok=True)
 
 
+
+def roman_to_int(letters):
+    values = {"I": 1, "V": 5, "X": 10, "L": 50, "C": 100, "D": 500, "M": 1000}
+    text = letters.upper()
+    total, last = 0, 0
+    for c in reversed(text):
+        n = values[c]
+        total += -n if n < last else n
+        last = n
+    # Reject invalid numerals, including accidental words.
+    def to_roman(n):
+        result = ""
+        for val, token in [(1000,"M"),(900,"CM"),(500,"D"),(400,"CD"),
+                           (100,"C"),(90,"XC"),(50,"L"),(40,"XL"),
+                           (10,"X"),(9,"IX"),(5,"V"),(4,"IV"),(1,"I")]:
+            result += token * (n // val)
+            n %= val
+        return result
+    return total if total > 0 and to_roman(total) == text else None
+
+
+def normalize_number_field(value):
+    """Conservatively remove volume/issue labels and convert Roman numerals."""
+    if not value:
+        return value
+    text = str(value).strip()
+    text = re.sub(
+        r"(?i)\b(?:tomus|t|vol(?:ume)?|band|bd|jahrgang|jg|évf(?:olyam)?|"
+        r"fasc(?:iculus)?|heft|no|nr|szám)\b\.?",
+        " ", text)
+    text = re.sub(r"\s+", " ", text).strip(" ,;:.")
+    text = re.sub(r"\s*[\u2012-\u2015-]\s*", "-", text)
+    # Only normalize when the remainder consists of numbers/Roman numerals
+    # and optional single-letter suffixes (e.g. 2A). Preserve complex strings.
+    parts = text.split("-")
+    cleaned = []
+    for part in parts:
+        part = part.strip().strip(".")
+        if re.fullmatch(r"[IVXLCDM]+", part, re.I):
+            converted = roman_to_int(part)
+            cleaned.append(str(converted) if converted is not None else part)
+        else:
+            cleaned.append(part)
+    return "-".join(cleaned) or None
+
+
 def extract(client, model, prompt, box, images):
     content = [{"type": "input_text", "text": prompt}]
     content.extend(image_content(p) for p in images)
@@ -183,6 +229,8 @@ def extract(client, model, prompt, box, images):
     data = response.output_parsed.model_dump()
     if data["handwriting"] not in {"Yes", "No", "Uncertain"}:
         raise ValueError("Invalid handwriting status")
+    for field in ("volume", "issue"):
+        data[field] = normalize_number_field(data[field])
     if data["year"]:
         data["offprint_year"] = None
     data["box"] = box.name
