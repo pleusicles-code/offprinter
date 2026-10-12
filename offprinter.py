@@ -215,12 +215,12 @@ def normalize_number_field(value):
     return "-".join(cleaned) or None
 
 
-def extract(client, model, prompt, box, images):
+def extract(client, model, reasoning, prompt, box, images):
     content = [{"type": "input_text", "text": prompt}]
     content.extend(image_content(p) for p in images)
     response = client.responses.parse(
         model=model,
-        reasoning={"effort": "none"},
+        reasoning={"effort": reasoning},
         input=[{"role": "user", "content": content}],
         text_format=Metadata,
         store=False,
@@ -261,6 +261,7 @@ def extract(client, model, prompt, box, images):
         cost_huf = round(cost_usd * HUF_PER_USD, 4)
     data["processing"] = {
         "model": model,
+        "reasoning": reasoning,
         "processed_at": datetime.now(timezone.utc).isoformat(),
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
@@ -352,6 +353,8 @@ def main():
                     help="comma-separated operations: fix,json,xls")
     ap.add_argument("-f", "--force", action="store_true", help="reprocess and back up prior JSON")
     ap.add_argument("-m", "--model", default=DEFAULT_MODEL)
+    ap.add_argument("--reasoning", choices=("none", "low", "medium", "high", "xhigh"), default="none",
+                    help="model reasoning effort (default: none)")
     ap.add_argument("--limit", type=int, help="maximum offprints to process (testing)")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
@@ -390,7 +393,7 @@ def main():
                 print("  JSON exists; skipped")
                 continue
             try:
-                result = extract(client, args.model, prompt, box, images)
+                result = extract(client, args.model, args.reasoning, prompt, box, images)
                 write_json_atomic(dest, result, backup=args.force)
                 print(f"  {result.get('author') or '?'} — {result.get('title') or '?'}")
             except Exception as exc:
