@@ -43,8 +43,9 @@ The script and prompt.txt stay inside the offprinter repository; the API key, Bo
     python offprinter.py --dry-run         # preview selection/pairing
     python offprinter.py -b 1 --force      # reprocess existing JSON
     python offprinter.py -m gpt-5.4        # alternative model
+    python offprinter.py -b 1 --reasoning low  # test low reasoning effort
 
-Operations always run in the order fix → json → xls, with defaults fix,json,xls and gpt-5.4-mini.
+Operations always run in the order fix → json → xls, with defaults fix,json,xls, gpt-5.4-mini and reasoning effort none. Use --reasoning none|low|medium|high|xhigh to choose the effort level. The selected value is recorded as processing.reasoning in each newly generated JSON.
 
 ## Rotation
 
