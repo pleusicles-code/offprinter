@@ -33,8 +33,8 @@ class ReviewedWork(BaseModel):
 
 class Metadata(BaseModel):
     author: str | None
+    author_normalized: str | None
     title: str | None
-    publication_type: str | None
     publication: str | None
     volume: str | None
     issue: str | None
@@ -215,6 +215,26 @@ def normalize_number_field(value):
     return "-".join(cleaned) or None
 
 
+
+def normalize_pages(value):
+    """Do not mistake isolated page numbers or annotations for ranges."""
+    if value is None:
+        return None
+    value = re.sub(r"\s*[–—−-]\s*", "-", str(value).strip())
+    return value if re.fullmatch(r"\d+[A-Za-z]?-\d+[A-Za-z]?", value) else None
+
+
+def estimate_cost(item):
+    usage = item.get("processing") or {}
+    if isinstance(usage.get("cost_huf"), (int, float)):
+        return usage["cost_huf"]
+    i, o = usage.get("input_tokens"), usage.get("output_tokens")
+    if usage.get("model") != DEFAULT_MODEL or not isinstance(i, int) or not isinstance(o, int):
+        return None
+    return round((i * GPT54_MINI_INPUT_USD_PER_MILLION
+                  + o * GPT54_MINI_OUTPUT_USD_PER_MILLION) * HUF_PER_USD / 1_000_000, 4)
+
+
 def extract(client, model, reasoning, prompt, box, images):
     content = [{"type": "input_text", "text": prompt}]
     content.extend(image_content(p) for p in images)
@@ -232,8 +252,7 @@ def extract(client, model, reasoning, prompt, box, images):
         raise ValueError("Invalid handwriting status")
     for field in ("volume", "issue"):
         data[field] = normalize_number_field(data[field])
-    if data["publication_type"]:
-        data["publication_type"] = data["publication_type"].strip().lower()
+    data["pages"] = normalize_pages(data["pages"])
     if data["year"]:
         data["offprint_year"] = None
     missing = [field for field in ("author", "title")
@@ -272,11 +291,12 @@ def extract(client, model, reasoning, prompt, box, images):
 
 HEADERS = [
     "Box", "Photograph 1", "Photograph 2", "Author", "Title",
-    "Type", "Publication", "Volume", "Issue", "Year",
+    "Publication", "Volume", "Issue", "Year",
     "Offprint year", "Pages", "Place", "Publisher",
     "DOI", "Contributors", "Reviewed work", "Handwriting",
     "Handwriting type", "Handwriting text", "Handwriting notes",
     "Needs review", "Review reason", "Model", "Processed at",
+    "Author_normalized", "cost_huf",
 ]
 
 
@@ -300,14 +320,14 @@ def export_xlsx(records, outfile):
         usage = item.get("processing") or {}
         row = [
             box, images[0] if images else None, images[1] if len(images) > 1 else None,
-            item.get("author"), item.get("title"), item.get("publication_type"),
-            item.get("publication"), item.get("volume"), item.get("issue"),
-            item.get("year"), item.get("offprint_year"), item.get("pages"),
+            item.get("author"), item.get("title"), item.get("publication"), item.get("volume"), item.get("issue"),
+            item.get("year"), item.get("offprint_year"), normalize_pages(item.get("pages")),
             item.get("publication_place"), item.get("publisher"), item.get("doi"),
             item.get("contributors"), book, item.get("handwriting"),
             item.get("handwriting_type"), item.get("handwriting_text"),
             item.get("handwriting_notes"), "Yes" if item.get("needs_review") else "No",
             item.get("review_reason"), usage.get("model"), usage.get("processed_at"),
+            item.get("author_normalized"), estimate_cost(item),
         ]
         sh.append(row)
         current = sh.max_row
