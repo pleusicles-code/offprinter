@@ -15,7 +15,8 @@ from PIL import Image
 from openai import OpenAI
 from pydantic import BaseModel
 
-ROOT = Path(__file__).resolve().parent
+SCRIPT_DIR = Path(__file__).resolve().parent
+ROOT = SCRIPT_DIR.parent
 EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp"}
 DEFAULT_MODEL = "gpt-5.4-mini"
 
@@ -299,7 +300,7 @@ def main():
             print(f"{dest.relative_to(ROOT)} <= {', '.join(p.name for p in ims)}")
         return
     client = OpenAI(api_key=load_key(), max_retries=3, timeout=90) if "json" in operations else None
-    prompt = (ROOT / "prompt.txt").read_text(encoding="utf-8") if client else None
+    prompt = (SCRIPT_DIR / "prompt.txt").read_text(encoding="utf-8") if client else None
     failures = 0
     for number, (box, images, dest) in enumerate(tasks, 1):
         print(f"[{number}/{len(tasks)}] {box.name}: {', '.join(p.name for p in images)}", flush=True)
