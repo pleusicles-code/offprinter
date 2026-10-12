@@ -54,7 +54,7 @@ For EXIF orientation 3, the project-specific rule is to rotate pixels 270 degree
 
 One validated JSON is stored next to each offprint's first image. When forcing reprocessing, old JSON is backed up as .json.bak, replacing any earlier backup. Existing JSON is skipped by default. API calls send one or two images together for a single offprint.
 
-The original publication year is stored as year. offprint_year is used only when the original year is unknown. needs_review refers exclusively to bibliographic identification, never handwritten notes.
+Only two publication-year fields are used: year is the default year for all publication types; offprint_year is used solely when the original publication year of an offprint cannot be determined and a separate offprint date is visible. Excel keeps these as two distinct columns. Existing JSON files are not automatically rewritten. needs_review refers exclusively to bibliographic identification, never handwritten notes.
 
 XLSX export in the parent directory produces offprints_YYYYMMDD_HHMMSS.xlsx with Catalogue and Summary worksheets and photo hyperlinks. Those hyperlinks use absolute local file paths and may need regeneration if files are moved. XLSX generation does not call the API.
 
