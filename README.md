@@ -74,3 +74,11 @@ The script clears `pages` unless the model returns an explicit page range with t
 The Summary worksheet includes single/double-photo counts, review counts, handwriting counts, missing-date counts, and estimated HUF costs for each box and for the collection. Costs of older GPT-5.4 mini records can be recomputed from saved input/output tokens during Excel export.
 
 To populate author_normalized in existing JSON files, reprocess with `--force`; regenerating XLSX alone cannot infer missing author normalization from old records.
+
+## Selective reprocessing
+
+Newly generated JSON records include `"flagged": false` as the final key inside the `processing` object. To mark an item for reprocessing, manually change this value to the JSON boolean `true` (without quotes).
+
+Run `python offprinter.py --force-flagged` to process photographs with no existing JSON and reprocess **only** existing records with `processing.flagged == true`. Other JSON files are skipped. Reprocessed records are backed up to `.json.bak` and their newly generated `processing.flagged` is reset to `false`.
+
+`--force` (reprocess all) and `--force-flagged` are mutually exclusive. Existing JSON records without the new flag are treated as unflagged. No API request is made for an unflagged existing record.
