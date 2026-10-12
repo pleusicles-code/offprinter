@@ -285,6 +285,7 @@ def extract(client, model, reasoning, prompt, box, images):
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
         "cost_huf": cost_huf,
+        "flagged": False,
     }
     return data
 
@@ -399,7 +400,11 @@ def main():
     ap.add_argument("-b", "--box", help="box number or inclusive range (e.g. 3 or 1-5)")
     ap.add_argument("-o", "--operation", default="fix,json,xls",
                     help="comma-separated operations: fix,json,xls")
-    ap.add_argument("-f", "--force", action="store_true", help="reprocess and back up prior JSON")
+    force_group = ap.add_mutually_exclusive_group()
+    force_group.add_argument("-f", "--force", action="store_true",
+                             help="reprocess and back up all existing JSON")
+    force_group.add_argument("--force-flagged", action="store_true",
+                             help="reprocess and back up JSON with processing.flagged=true")
     ap.add_argument("-m", "--model", default=DEFAULT_MODEL)
     ap.add_argument("--reasoning", choices=("none", "low", "medium", "high", "xhigh"), default="none",
                     help="model reasoning effort (default: none)")
@@ -437,12 +442,23 @@ def main():
                     print(f"  ERROR rotating {p}: {exc}", file=sys.stderr)
                     continue
         if "json" in operations:
-            if dest.exists() and not args.force:
-                print("  JSON exists; skipped")
-                continue
             try:
+                if dest.exists() and not args.force:
+                    if not args.force_flagged:
+                        print("  JSON exists; skipped")
+                        continue
+                    existing = json.loads(dest.read_text(encoding="utf-8"))
+                    if not isinstance(existing, dict):
+                        raise ValueError("Existing JSON root is not an object")
+                    processing = existing.get("processing") or {}
+                    if not isinstance(processing, dict):
+                        raise ValueError("Existing JSON processing is not an object")
+                    if processing.get("flagged") is not True:
+                        print("  JSON not flagged; skipped")
+                        continue
+                    print("  flagged: reprocessing")
                 result = extract(client, args.model, args.reasoning, prompt, box, images)
-                write_json_atomic(dest, result, backup=args.force)
+                write_json_atomic(dest, result, backup=dest.exists())
                 print(f"  {result.get('author') or '?'} — {result.get('title') or '?'}")
             except Exception as exc:
                 failures += 1
