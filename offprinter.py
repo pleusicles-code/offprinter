@@ -53,7 +53,7 @@ class Metadata(BaseModel):
 
 
 def natural_key(p):
-    return [int(t) if t.isdigit() else t.lower()
+    return [(0, int(t)) if t.isdigit() else (1, t.lower())
             for t in re.split(r"(\d+)", p.name)]
 
 
