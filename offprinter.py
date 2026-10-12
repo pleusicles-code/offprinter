@@ -19,6 +19,9 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT = SCRIPT_DIR.parent
 EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp"}
 DEFAULT_MODEL = "gpt-5.4-mini"
+HUF_PER_USD = 330.0
+GPT54_MINI_INPUT_USD_PER_MILLION = 0.75
+GPT54_MINI_OUTPUT_USD_PER_MILLION = 4.50
 
 
 class ReviewedWork(BaseModel):
@@ -246,11 +249,22 @@ def extract(client, model, prompt, box, images):
         data["review_reason"] = None
     data["box"] = box.name
     data["images"] = [p.relative_to(box).as_posix() for p in images]
+    input_tokens = response.usage.input_tokens if response.usage else None
+    output_tokens = response.usage.output_tokens if response.usage else None
+    # Fixed project pricing; no live FX lookup. Other models have different rates.
+    cost_huf = None
+    if model == DEFAULT_MODEL and input_tokens is not None and output_tokens is not None:
+        cost_usd = (
+            input_tokens * GPT54_MINI_INPUT_USD_PER_MILLION
+            + output_tokens * GPT54_MINI_OUTPUT_USD_PER_MILLION
+        ) / 1_000_000
+        cost_huf = round(cost_usd * HUF_PER_USD, 4)
     data["processing"] = {
         "model": model,
         "processed_at": datetime.now(timezone.utc).isoformat(),
-        "input_tokens": response.usage.input_tokens if response.usage else None,
-        "output_tokens": response.usage.output_tokens if response.usage else None,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "cost_huf": cost_huf,
     }
     return data
 
