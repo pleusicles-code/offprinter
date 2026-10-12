@@ -206,74 +206,71 @@ HEADERS = [
 
 
 def export_xlsx(records, outfile):
-    # Deferred import: fix/json operations do not require the spreadsheet package.
-    from artifact_tool import Workbook, SpreadsheetFile
-    wb = Workbook.create()
-    sh = wb.worksheets.add("Catalogue")
-    rows = [HEADERS]
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+
+    wb = Workbook()
+    sh = wb.active
+    sh.title = "Catalogue"
+    sh.append(HEADERS)
     summary = Counter()
     for path, item in records:
-        b = item.get("box", path.parent.name)
-        imgs = item.get("images", [])
-        if not isinstance(imgs, list):
-            imgs = []
+        box = item.get("box") or (path.parent.parent.name if path.parent.name == "double" else path.parent.name)
+        images = item.get("images") or []
         work = item.get("reviewed_work") or {}
         if not isinstance(work, dict):
             work = {}
-        book = "; ".join(str(work[k]) for k in ("author", "title", "year")
-                         if work.get(k))
-        effective_year = item.get("year") or item.get("offprint_year")
-        images = [str(x) for x in imgs[:2]]
-        images += [""] * (2 - len(images))
-        p = item.get("processing") or {}
-        vals = [
-            b, images[0], images[1], item.get("author"), item.get("title"),
-            item.get("publication_type"), item.get("publication"),
-            item.get("volume"), item.get("issue"), effective_year,
-            item.get("year"), item.get("offprint_year"), item.get("pages"),
-            item.get("publication_date"), item.get("publication_place"),
-            item.get("publisher"), item.get("doi"),
+        book = "; ".join(str(work[k]) for k in ("author", "title", "year") if work.get(k))
+        usage = item.get("processing") or {}
+        row = [
+            box, images[0] if images else None, images[1] if len(images) > 1 else None,
+            item.get("author"), item.get("title"), item.get("publication_type"),
+            item.get("publication"), item.get("volume"), item.get("issue"),
+            item.get("year") or item.get("offprint_year"), item.get("year"),
+            item.get("offprint_year"), item.get("pages"), item.get("publication_date"),
+            item.get("publication_place"), item.get("publisher"), item.get("doi"),
             item.get("contributors"), book, item.get("handwriting"),
             item.get("handwriting_type"), item.get("handwriting_text"),
-            item.get("handwriting_notes"),
-            "Yes" if item.get("needs_review") else "No",
-            item.get("review_reason"), p.get("model"), p.get("processed_at")
+            item.get("handwriting_notes"), "Yes" if item.get("needs_review") else "No",
+            item.get("review_reason"), usage.get("model"), usage.get("processed_at"),
         ]
-        rows.append(["" if v is None else str(v) for v in vals])
-        summary[b] += 1
-    sh.get_range_by_indexes(0, 0, len(rows), len(HEADERS)).values = rows
-    sh.get_range_by_indexes(0, 0, 1, len(HEADERS)).format = {
-        "fill": "#23445A",
-        "font": {"bold": True, "color": "#FFFFFF"},
-        "row_height": 27,
-    }
-    sh.freeze_panes.freeze_rows(1)
-    for i, col in enumerate(HEADERS):
-        width = 38 if col in {"Title", "Publication", "Handwriting text", "Review reason"} else 20
-        if col == "Box":
-            width = 12
-        sh.get_range_by_indexes(0, i, len(rows), 1).format.column_width = width
-    # Store portable relative filenames, and use Excel HYPERLINK formulas.
-    for row_index, (path, item) in enumerate(records, start=2):
-        box_dir = path.parent.parent if path.parent.name.lower() == "double" else path.parent
-        box = item.get("box", box_dir.name)
-        for j, rel in enumerate((item.get("images") or [])[:2]):
-            target = f"{box}/{rel}".replace('"', '""')
-            label = str(rel).replace('"', '""')
-            sh.get_cell(row_index - 1, j + 1).formulas = [[
-                f'=HYPERLINK("{target}","{label}")'
-            ]]
-    summary_sh = wb.worksheets.add("Summary")
-    srows = [["Box", "Records"]] + [[k, v] for k, v in sorted(summary.items())]
-    srows.append(["TOTAL", len(records)])
-    summary_sh.get_range_by_indexes(0, 0, len(srows), 2).values = srows
-    summary_sh.get_range("A1:B1").format = {
-        "fill": "#23445A", "font": {"bold": True, "color": "#FFFFFF"}
-    }
-    summary_sh.get_range("A:A").format.column_width = 20
-    summary_sh.get_range("B:B").format.column_width = 15
-    SpreadsheetFile.export_xlsx(wb).save(str(outfile))
+        sh.append(row)
+        current = sh.max_row
+        for column, relative_path in ((2, images[0] if images else None),
+                                       (3, images[1] if len(images) > 1 else None)):
+            if relative_path:
+                cell = sh.cell(current, column)
+                cell.hyperlink = (ROOT / box / relative_path).resolve().as_uri()
+                cell.style = "Hyperlink"
+        summary[box] += 1
+    sh.freeze_panes = "A2"
+    sh.auto_filter.ref = sh.dimensions
+    sh.sheet_view.showGridLines = False
+    for cell in sh[1]:
+        cell.fill = PatternFill("solid", fgColor="23445A")
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.alignment = Alignment(vertical="center")
+    sh.row_dimensions[1].height = 26
+    for i, name in enumerate(HEADERS, 1):
+        sh.column_dimensions[get_column_letter(i)].width = (
+            44 if name in {"Title", "Publication", "Handwriting text", "Review reason"}
+            else 28 if name in {"Photograph 1", "Photograph 2"}
+            else 13 if name == "Box" else 20
+        )
 
+    stats = wb.create_sheet("Summary")
+    stats.append(["Box", "Records"])
+    for box, count in sorted(summary.items()):
+        stats.append([box, count])
+    stats.append(["TOTAL", len(records)])
+    for cell in stats[1]:
+        cell.fill = PatternFill("solid", fgColor="23445A")
+        cell.font = Font(bold=True, color="FFFFFF")
+    stats.column_dimensions["A"].width = 19
+    stats.column_dimensions["B"].width = 15
+    stats.freeze_panes = "A2"
+    wb.save(outfile)
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
