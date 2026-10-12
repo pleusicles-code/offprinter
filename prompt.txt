@@ -10,4 +10,9 @@ Look for handwriting anywhere on the photographed page. Set handwriting to Yes, 
 
 needs_review is true ONLY for significant bibliographic identification ambiguity or unreliability: missing/illegible author or title, uncertain source identification, confusion between a review and the reviewed book, contradictory bibliographic data, etc. Missing optional fields alone is NOT enough. If true, explain briefly in review_reason. Otherwise review_reason is null.
 
+
+NORMALIZATION OF NUMERIC FIELDS: For volume and issue, return Arabic numerals regardless of the printed numeral system. Remove bibliographic labels such as T., Tomus, vol., Band, Bd., Jahrgang, Jg., évf., fasc., fasciculus, Heft, no., Nr., szám. Examples: volume "T. XXVII" -> "27"; issue "fasc. 2" -> "2"; "IV. évf." -> "4"; issue "1–4. szám" -> "1-4". Preserve meaningful ranges, suffixes and multiple issue numbers. Do not convert Roman numerals in TITLES or proper names.
+
+AUTHOR SCRIPT AND CASE: Normalize names printed in ALL CAPS to ordinary name capitalization, preserving genuine diacritics and established spelling: "MARÓT KÁROLY" -> "Marót Károly". Use Latin characters for names in Latin-script languages (Hungarian, German, etc.), even when visually similar Greek letters appear through OCR confusion. For example, "K. ΜΑΡΌΤ" is "K. Marót" (Greek Μ Α Ρ Ο Τ are not appropriate here). Conversely, preserve genuine Greek script for names actually printed in Greek and never indiscriminately transliterate them. Preserve initials and printed name order; never expand initials without evidence.
+
 Return exactly one record conforming to the provided JSON schema.
