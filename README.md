@@ -64,3 +64,13 @@ XLSX export in the parent directory produces offprints_YYYYMMDD_HHMMSS.xlsx with
 This is a public repository. Box folders, credentials, and generated workbooks are ignored by Git. Do not override these exclusions when committing data. The API key is read from ../.openai_api_key and is never deliberately placed in JSON or workbook output.
 
 Each newly processed GPT-5.4 mini JSON record includes `processing.cost_huf`, calculated at a fixed 330 HUF/USD using $0.75 per million input tokens and $4.50 per million output tokens. This is an estimate based on reported total tokens and does not apply alternative model prices or cached-input discounts; if another model is selected, `cost_huf` is null. Existing JSON files are not retroactively updated.\n\nOpenAI API usage is billed separately from ChatGPT subscriptions.
+
+## Bibliographic fields and Excel report
+
+Publication type is no longer extracted. Printed author names remain in `author`, while newly processed records also include `author_normalized` in the form "Surname, Given". This new field is appended to the Excel catalogue, along with `cost_huf`, without reordering existing columns (apart from removing the obsolete Type column).
+
+The script clears `pages` unless the model returns an explicit page range with two endpoints. This rule also applies when exporting older JSON files to Excel, without changing those JSON files.
+
+The Summary worksheet includes single/double-photo counts, review counts, handwriting counts, missing-date counts, and estimated HUF costs for each box and for the collection. Costs of older GPT-5.4 mini records can be recomputed from saved input/output tokens during Excel export.
+
+To populate author_normalized in existing JSON files, reprocess with `--force`; regenerating XLSX alone cannot infer missing author normalization from old records.
