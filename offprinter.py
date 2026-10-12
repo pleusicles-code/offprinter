@@ -312,13 +312,13 @@ def extract(client, model, reasoning, prompt, box, images):
 
 
 HEADERS = [
-    "Box", "Photograph 1", "Photograph 2", "Author", "Title",
+    "Box", "Photograph 1", "Photograph 2", "Author", "Author_normalized", "Title",
     "Publication", "Volume", "Issue", "Year",
     "Offprint year", "Pages", "Place", "Publisher",
     "DOI", "Contributors", "Reviewed work", "Handwriting",
     "Handwriting type", "Handwriting text", "Handwriting notes",
     "Needs review", "Review reason", "Model", "Processed at",
-    "Author_normalized", "cost_huf",
+    "cost_huf",
 ]
 
 
@@ -345,14 +345,14 @@ def export_xlsx(records, outfile):
             item.get("author"), item.get("author_normalized"))
         row = [
             box, images[0] if images else None, images[1] if len(images) > 1 else None,
-            author, item.get("title"), item.get("publication"), item.get("volume"), item.get("issue"),
+            author, author_normalized, item.get("title"), item.get("publication"), item.get("volume"), item.get("issue"),
             item.get("year"), item.get("offprint_year"), normalize_pages(item.get("pages")),
             item.get("publication_place"), item.get("publisher"), item.get("doi"),
             item.get("contributors"), book, item.get("handwriting"),
             item.get("handwriting_type"), item.get("handwriting_text"),
             item.get("handwriting_notes"), "Yes" if item.get("needs_review") else "No",
             item.get("review_reason"), usage.get("model"), usage.get("processed_at"),
-            author_normalized, estimate_cost(item),
+            estimate_cost(item),
         ]
         sh.append(row)
         current = sh.max_row
