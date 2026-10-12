@@ -229,8 +229,21 @@ def extract(client, model, prompt, box, images):
         raise ValueError("Invalid handwriting status")
     for field in ("volume", "issue"):
         data[field] = normalize_number_field(data[field])
+    if data["publication_type"]:
+        data["publication_type"] = data["publication_type"].strip().lower()
     if data["year"]:
         data["offprint_year"] = None
+    missing = [field for field in ("author", "title")
+               if not (data.get(field) or "").strip()]
+    if not (data.get("year") or data.get("offprint_year")):
+        missing.append("year")
+    if missing:
+        data["needs_review"] = True
+        reason = "Missing required bibliographic information: " + ", ".join(missing) + "."
+        existing = (data.get("review_reason") or "").strip()
+        data["review_reason"] = (reason + " " + existing).strip()
+    if not data["needs_review"]:
+        data["review_reason"] = None
     data["box"] = box.name
     data["images"] = [p.relative_to(box).as_posix() for p in images]
     data["processing"] = {
