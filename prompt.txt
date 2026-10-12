@@ -6,7 +6,16 @@ IMPORTANT: Distinguish a book review's author/reviewer from the author of the bo
 
 YEAR RULE: year means the ORIGINAL publication year. Only set offprint_year when the original publication year cannot be established from the photographs and the offprint's own year is visible. If year is known, offprint_year MUST be null. An unknown year or page range does not by itself require bibliographic review. Do not infer a beginning page solely from an ending page number.
 
-Look for handwriting anywhere on the photographed page. Set handwriting to Yes, No or Uncertain. If Yes, identify type and attempt a faithful transcription; use notes for unclear text. Handwriting problems NEVER influence needs_review.
+Look for handwriting anywhere on the photographed page. Set handwriting to Yes, No or Uncertain. If Yes, identify type and attempt a faithful transcription. Handwriting problems NEVER influence needs_review.
+
+STRICT HANDWRITING FIELD SEPARATION:
+- handwriting_text is ONLY a literal, faithful transcription of actually legible handwritten words, letters, numbers, punctuation, and abbreviations, in the ORIGINAL LANGUAGE AND SCRIPT. Never translate, paraphrase, explain, describe, summarize, or characterize the handwriting in this field. Never write phrases such as "handwritten notes are visible", "illegible signature", or descriptions of ink/color/location here.
+- If no handwriting can be reliably transcribed, handwriting_text MUST be null even if handwriting is visibly present.
+- If only a fragment can be read, transcribe only that fragment; never fill gaps with guesses. Do not treat tentative interpretations as certain transcriptions.
+- handwriting_notes is ONLY for descriptions, locations, apparent purpose, uncertainty, legibility, ink, and other explanatory remarks about the handwriting. These notes MUST be in English, regardless of the writing's language. Put ALL reports about handwriting here, never in handwriting_text.
+- review_reason MUST be in English. handwriting_type MUST use concise English labels (e.g. Dedication, Signature, Annotation, Ownership mark, Other), or null if not identifiable.
+- All AI-written explanatory metadata is in English; quoted/transcribed primary-source material, including handwriting_text, remains in the source language.
+- Handwritten numbers do not establish bibliographic year, volume, issue, or pagination. Record them in handwriting_text only if legible; discuss their possible meaning solely in handwriting_notes.
 
 needs_review is true ONLY for significant bibliographic identification ambiguity or unreliability: missing/illegible author or title, uncertain source identification, confusion between a review and the reviewed book, contradictory bibliographic data, etc. Missing optional fields alone is NOT enough. If true, explain briefly in review_reason. Otherwise review_reason is null.
 
