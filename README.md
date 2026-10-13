@@ -105,3 +105,12 @@ When the external author is absent, the similarity diagnostic reports `author no
 ## Confidence scores (new extractions)
 
 Newly processed JSON records and XLSX exports have four fields after the bibliographic fields: `ocr_confidence`, `numeric_confidence`, `bibliographic_confidence`, and `confidence_composite`. The first three are model judgments on an integer 1–10 scale. OCR measures readability/transcription of printed identifying text; numeric measures visual certainty of year/offprint_year, volume and issue **only** (not pages); bibliographic measures assignment of observed text/numbers to their correct fields. The Python script computes the composite as the arithmetic mean of all available confidence scores, rounded to one decimal; absent scores are excluded, not treated as zero. The XLSX exporter recalculates the composite for existing records. If no relevant numeric value exists, numeric confidence is null; composite confidence averages the available OCR and bibliographic scores instead. The scores do not override `needs_review`. Existing records export blank confidence cells unless reprocessed with `--force` or `--force-flagged`.
+
+## Confidence-based second pass with a stronger model
+
+Use `--force-below SCORE` to selectively reprocess records whose composite confidence (recomputed from available `ocr_confidence`, `numeric_confidence`, and `bibliographic_confidence`) is strictly below SCORE. Example:
+`python offprinter.py -b 1 --force-below 7.5 -m gpt-5.4 --reasoning none`.
+
+The threshold is inclusive of fractional scores and must be between 1 and 10. Existing JSON records with no confidence scores are skipped; records without any JSON are processed normally. Reprocessed JSON files are backed up to `.json.bak` (only the last backup is retained) and receive new confidence scores and `flagged=false`. The options `--force`, `--force-flagged`, and `--force-below` are mutually exclusive. Choosing a model does not guarantee that the new score will be higher. For GPT-6.1 Sol, use `--reasoning low` or higher.
+
+The current `processing.cost_huf` computation supports GPT-5.4 mini only; other models store `null` rather than reporting an incorrect cost.
