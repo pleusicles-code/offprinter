@@ -460,6 +460,8 @@ def main():
                              help="reprocess and back up all existing JSON")
     force_group.add_argument("--force-flagged", action="store_true",
                              help="reprocess and back up JSON with processing.flagged=true")
+    force_group.add_argument("--force-below", type=float, metavar="SCORE",
+                             help="reprocess JSON only if composite confidence is strictly below SCORE (1-10)")
     ap.add_argument("-m", "--model", default=DEFAULT_MODEL)
     ap.add_argument("--reasoning", choices=("none", "low", "medium", "high", "xhigh"), default="none",
                     help="model reasoning effort (default: none)")
@@ -471,6 +473,8 @@ def main():
         ap.error("operations must be fix,json,xls in any combination")
     if args.limit is not None and args.limit < 1:
         ap.error("--limit must be positive")
+    if args.force_below is not None and not 1 <= args.force_below <= 10:
+        ap.error("--force-below must be between 1 and 10")
     boxes = selected_boxes(ROOT, args.box)
     if not boxes:
         ap.error("No BoxXXX folders found beside offprinter.py")
@@ -499,19 +503,26 @@ def main():
         if "json" in operations:
             try:
                 if dest.exists() and not args.force:
-                    if not args.force_flagged:
+                    if not args.force_flagged and args.force_below is None:
                         print("  JSON exists; skipped")
                         continue
                     existing = json.loads(dest.read_text(encoding="utf-8"))
                     if not isinstance(existing, dict):
                         raise ValueError("Existing JSON root is not an object")
-                    processing = existing.get("processing") or {}
-                    if not isinstance(processing, dict):
-                        raise ValueError("Existing JSON processing is not an object")
-                    if processing.get("flagged") is not True:
-                        print("  JSON not flagged; skipped")
-                        continue
-                    print("  flagged: reprocessing")
+                    if args.force_flagged:
+                        processing = existing.get("processing") or {}
+                        if not isinstance(processing, dict):
+                            raise ValueError("Existing JSON processing is not an object")
+                        if processing.get("flagged") is not True:
+                            print("  JSON not flagged; skipped")
+                            continue
+                        print("  flagged: reprocessing")
+                    elif args.force_below is not None:
+                        confidence = composite_confidence(existing)
+                        if confidence is None or confidence >= args.force_below:
+                            print(f"  confidence {confidence}: skipped")
+                            continue
+                        print(f"  confidence {confidence} below {args.force_below}: reprocessing")
                 result = extract(client, args.model, args.reasoning, prompt, box, images)
                 write_json_atomic(dest, result, backup=dest.exists())
                 print(f"  {result.get('author') or '?'} — {result.get('title') or '?'}")
