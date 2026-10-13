@@ -154,6 +154,24 @@ def model_json_path(photo, model):
     return photo.with_name(photo.stem + "." + model + ".json")
 
 
+def model_or_legacy_path(photo, model):
+    """Resolve a model record, falling back to legacy mini JSON if appropriate."""
+    named = model_json_path(photo, model)
+    if named.exists():
+        return named
+    if model == DEFAULT_MODEL:
+        legacy = photo.with_suffix(".json")
+        if legacy.exists():
+            try:
+                data = json.loads(legacy.read_text(encoding="utf-8"))
+                recorded_model = (data.get("processing") or {}).get("model")
+                if recorded_model in (None, DEFAULT_MODEL):
+                    return legacy
+            except (ValueError, OSError, AttributeError):
+                pass
+    return None
+
+
 def existing_json_paths(photo):
     """Discover model-specific files and earlier legacy unsuffixed JSON."""
     candidates = [photo.with_suffix(".json")]
@@ -630,8 +648,8 @@ def main():
         if "json" in operations:
             try:
                 if args.below_model:
-                    standard_path = model_json_path(images[0], args.below_model)
-                    if not standard_path.exists():
+                    standard_path = model_or_legacy_path(images[0], args.below_model)
+                    if standard_path is None:
                         print("  standard-model JSON missing; skipped")
                         continue
                     standard = json.loads(standard_path.read_text(encoding="utf-8"))
@@ -681,15 +699,9 @@ def main():
             for images, first_photo in units(box):
                 if first_photo not in selected_photos:
                     continue
-                advanced = model_json_path(first_photo, args.model)
-                standard = model_json_path(first_photo, args.below_model) if args.below_model else None
-                chosen = advanced if advanced.exists() else (
-                    standard if standard is not None and standard.exists() else None)
-                # Legacy JSON is used only for the default model, and only
-                # when it explicitly identifies that model (or lacks model info).
-                legacy = first_photo.with_suffix(".json")
-                if chosen is None and args.model == DEFAULT_MODEL and legacy.exists():
-                    chosen = legacy
+                advanced = model_or_legacy_path(first_photo, args.model)
+                standard = model_or_legacy_path(first_photo, args.below_model) if args.below_model else None
+                chosen = advanced or standard
                 for dest in existing_json_paths(first_photo):
                     try:
                         data = json.loads(dest.read_text(encoding="utf-8"))
