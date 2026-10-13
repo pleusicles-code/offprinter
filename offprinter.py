@@ -46,6 +46,9 @@ class Metadata(BaseModel):
     doi: str | None
     contributors: str | None
     reviewed_work: ReviewedWork | None
+    ocr_confidence: int
+    numeric_confidence: int | None
+    bibliographic_confidence: int
     handwriting: str
     handwriting_type: str | None
     handwriting_text: str | None
@@ -274,6 +277,15 @@ def extract(client, model, reasoning, prompt, box, images):
     for field in ("volume", "issue"):
         data[field] = normalize_number_field(data[field])
     data["pages"] = normalize_pages(data["pages"])
+    scores = ("ocr_confidence", "numeric_confidence", "bibliographic_confidence")
+    if not any(data.get(k) for k in ("year", "offprint_year", "volume", "issue")):
+        data["numeric_confidence"] = None
+    for k in scores:
+        v = data[k]
+        if v is not None and (type(v) is not int or not 1 <= v <= 10):
+            raise ValueError(f"{k} must be an integer from 1 to 10 or null")
+    observed = [data[k] for k in scores if data[k] is not None]
+    data["confidence_composite"] = round(sum(observed) / len(observed), 1) if len(observed) == 3 else None
     if data["year"]:
         data["offprint_year"] = None
     missing = [field for field in ("author", "title")
@@ -315,7 +327,8 @@ HEADERS = [
     "Box", "Photograph 1", "Photograph 2", "Author", "Author_normalized", "Title",
     "Publication", "Volume", "Issue", "Year",
     "Offprint year", "Pages", "Place", "Publisher",
-    "DOI", "Contributors", "Reviewed work", "Handwriting",
+    "DOI", "Contributors", "Reviewed work",
+    "OCR confidence", "Numeric confidence", "Bibliographic confidence", "Composite confidence", "Handwriting",
     "Handwriting type", "Handwriting text", "Handwriting notes",
     "Needs review", "Review reason", "Model", "Processed at",
     "cost_huf",
@@ -348,7 +361,10 @@ def export_xlsx(records, outfile):
             author, author_normalized, item.get("title"), item.get("publication"), item.get("volume"), item.get("issue"),
             item.get("year"), item.get("offprint_year"), normalize_pages(item.get("pages")),
             item.get("publication_place"), item.get("publisher"), item.get("doi"),
-            item.get("contributors"), book, item.get("handwriting"),
+            item.get("contributors"), book,
+            item.get("ocr_confidence"), item.get("numeric_confidence"),
+            item.get("bibliographic_confidence"), item.get("confidence_composite"),
+            item.get("handwriting"),
             item.get("handwriting_type"), item.get("handwriting_text"),
             item.get("handwriting_notes"), "Yes" if item.get("needs_review") else "No",
             item.get("review_reason"), usage.get("model"), usage.get("processed_at"),
