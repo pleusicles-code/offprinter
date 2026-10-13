@@ -227,6 +227,15 @@ def normalize_pages(value):
     return value if re.fullmatch(r"\d+[A-Za-z]?-\d+[A-Za-z]?", value) else None
 
 
+def composite_confidence(item):
+    """Average available confidence scores; missing fields do not reduce confidence."""
+    fields = ("ocr_confidence", "numeric_confidence", "bibliographic_confidence")
+    available = [item.get(k) for k in fields
+                 if isinstance(item.get(k), (int, float))
+                 and not isinstance(item.get(k), bool)]
+    return round(sum(available) / len(available), 1) if available else None
+
+
 def estimate_cost(item):
     usage = item.get("processing") or {}
     if isinstance(usage.get("cost_huf"), (int, float)):
@@ -285,7 +294,7 @@ def extract(client, model, reasoning, prompt, box, images):
         if v is not None and (type(v) is not int or not 1 <= v <= 10):
             raise ValueError(f"{k} must be an integer from 1 to 10 or null")
     observed = [data[k] for k in scores if data[k] is not None]
-    data["confidence_composite"] = round(sum(observed) / len(observed), 1) if len(observed) == 3 else None
+    data["confidence_composite"] = round(sum(observed) / len(observed), 1) if observed else None
     composite = data.pop("confidence_composite")
     ordered = {}
     for key, val in data.items():
@@ -370,7 +379,7 @@ def export_xlsx(records, outfile):
             item.get("publication_place"), item.get("publisher"), item.get("doi"),
             item.get("contributors"), book,
             item.get("ocr_confidence"), item.get("numeric_confidence"),
-            item.get("bibliographic_confidence"), item.get("confidence_composite"),
+            item.get("bibliographic_confidence"), composite_confidence(item),
             item.get("handwriting"),
             item.get("handwriting_type"), item.get("handwriting_text"),
             item.get("handwriting_notes"), "Yes" if item.get("needs_review") else "No",
