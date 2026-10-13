@@ -19,7 +19,8 @@ from pydantic import BaseModel
 SCRIPT_DIR = Path(__file__).resolve().parent
 ROOT = SCRIPT_DIR.parent
 EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp"}
-DEFAULT_MODEL = "gpt-5.4-mini"
+DEFAULT_MODEL = "gemini-3.8-flash"
+LEGACY_DEFAULT_MODEL = "gpt-5.4-mini"
 HUF_PER_USD = 330.0
 # Standard API token prices (USD / 1M tokens), fixed as of 2026-10-13.
 # Tuple: regular input, cached input, output. Review periodically.
@@ -163,13 +164,13 @@ def model_or_legacy_path(photo, model):
     named = model_json_path(photo, model)
     if named.exists():
         return named
-    if model == DEFAULT_MODEL:
+    if model == LEGACY_DEFAULT_MODEL:
         legacy = photo.with_suffix(".json")
         if legacy.exists():
             try:
                 data = json.loads(legacy.read_text(encoding="utf-8"))
                 recorded_model = (data.get("processing") or {}).get("model")
-                if recorded_model in (None, DEFAULT_MODEL):
+                if recorded_model in (None, LEGACY_DEFAULT_MODEL):
                     return legacy
             except (ValueError, OSError, AttributeError):
                 pass
