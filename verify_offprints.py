@@ -133,12 +133,12 @@ def real_search(record, cache):
         page = cached_text(url, cache)
         parser = _RealLinks()
         parser.feed(page)
-        for ident in parser.ids[:25]:
+        for ident in parser.ids[:12]:
             if ident not in ids:
                 ids.append(ident)
-        if len(ids) >= 35:
+        if len(ids) >= 18:
             break
-    for ident in ids[:35]:
+    for ident in ids[:18]:
         url = f"https://real.mtak.hu/cgi/export/eprint/{ident}/JSON/REAL-eprint-{ident}.js"
         try:
             obj = json.loads(cached_text(url, cache))
@@ -193,7 +193,8 @@ def verify(rec,cache,key,openalex_key,ai_mode):
     # Discovery threshold: intentionally permissive. This only admits a
     # candidate for further checking; it does not authorize corrections.
     if t < .78 or (value(rec.get("Author")) and a is not None and a < .65) or overall < .76:
-        return {}, f"UNVERIFIED (best candidate: title {t:.0%}, author {(f"{a:.0%}" if a is not None else "not supplied")}, score {overall:.0%})", best["url"]
+        author_label = f"{a:.0%}" if a is not None else "not supplied"
+        return {}, f"UNVERIFIED (best candidate: title {t:.0%}, author {author_label}, score {overall:.0%})", best["url"]
     if len(ranked)>1 and overall-ranked[1][0][0]<.035:
         other=ranked[1][1]
         same=sim(best["title"],other["title"])>.97 and sim(best["author"].replace(",", " "),other["author"].replace(",", " "))>.9
