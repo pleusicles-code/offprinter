@@ -135,16 +135,30 @@ def units(box):
         return sorted((p for p in folder.iterdir()
                        if p.is_file() and p.suffix.lower() in EXTENSIONS),
                       key=natural_key)
-    singles = [([p], p.with_suffix(".json")) for p in photos(box)]
+    singles = [([p], p) for p in photos(box)]
     doubles = box / "double"
     pairs = []
     if doubles.is_dir():
         images = photos(doubles)
         if len(images) % 2:
             raise ValueError(f"{doubles}: odd number of photos ({len(images)})")
-        pairs = [([images[i], images[i + 1]], images[i].with_suffix(".json"))
+        pairs = [([images[i], images[i + 1]], images[i])
                  for i in range(0, len(images), 2)]
     return singles + pairs
+
+
+def model_json_path(photo, model):
+    """Output path for one model's independent extraction of an offprint."""
+    if model not in MODEL_PRICING:
+        raise ValueError(f"Unknown model: {model}")
+    return photo.with_name(photo.stem + "." + model + ".json")
+
+
+def existing_json_paths(photo):
+    """Discover model-specific files and earlier legacy unsuffixed JSON."""
+    candidates = [photo.with_suffix(".json")]
+    candidates.extend(sorted(photo.parent.glob(photo.stem + ".*.json")))
+    return [p for p in dict.fromkeys(candidates) if p.is_file()]
 
 
 def fix_rotation(path):
@@ -568,7 +582,8 @@ def main():
     boxes = selected_boxes(ROOT, args.box)
     if not boxes:
         ap.error("No BoxXXX folders found beside offprinter.py")
-    tasks = [(box, ims, dest) for box in boxes for ims, dest in units(box)]
+    tasks = [(box, ims, model_json_path(photo, args.model))
+             for box in boxes for ims, photo in units(box)]
     if args.limit:
         tasks = tasks[:args.limit]
     print(f"Selected {len(boxes)} boxes, {len(tasks)} offprints; operations: {','.join(sorted(operations))}")
@@ -628,11 +643,12 @@ def main():
         # Avoid artificial waits; SDK handles transient API retries.
     if "xls" in operations:
         records = []
+        selected_photos = {ims[0] for _, ims, _ in tasks}
         for box in boxes:
-            for images, dest in units(box):
-                if args.limit and (box, images, dest) not in tasks:
+            for images, first_photo in units(box):
+                if first_photo not in selected_photos:
                     continue
-                if dest.exists():
+                for dest in existing_json_paths(first_photo):
                     try:
                         data = json.loads(dest.read_text(encoding="utf-8"))
                         if not isinstance(data, dict):
