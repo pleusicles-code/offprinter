@@ -286,6 +286,13 @@ def extract(client, model, reasoning, prompt, box, images):
             raise ValueError(f"{k} must be an integer from 1 to 10 or null")
     observed = [data[k] for k in scores if data[k] is not None]
     data["confidence_composite"] = round(sum(observed) / len(observed), 1) if len(observed) == 3 else None
+    composite = data.pop("confidence_composite")
+    ordered = {}
+    for key, val in data.items():
+        if key == "handwriting":
+            ordered["confidence_composite"] = composite
+        ordered[key] = val
+    data = ordered
     if data["year"]:
         data["offprint_year"] = None
     missing = [field for field in ("author", "title")
