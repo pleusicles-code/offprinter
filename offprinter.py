@@ -560,6 +560,8 @@ def main():
             ap.error(str(exc))
     if args.model not in MODEL_PRICING:
         ap.error("Unknown model; run --model without a value to see supported models")
+    if args.model == "gemini-3.8-flash" and args.reasoning == "xhigh":
+        ap.error("Gemini 3.8 Flash supports low, medium or high reasoning, not xhigh")
     if args.model in MIN_REASONING_MODELS and args.reasoning == "none":
         print(f"{args.model} requires reasoning; using low instead of none.")
         args.reasoning = "low"
@@ -574,7 +576,13 @@ def main():
         for box, ims, dest in tasks:
             print(f"{dest.relative_to(ROOT)} <= {', '.join(p.name for p in ims)}")
         return
-    client = OpenAI(api_key=load_key(), max_retries=3, timeout=90) if "json" in operations else None
+    client = None
+    if "json" in operations:
+        if args.model == "gemini-3.8-flash":
+            from google import genai
+            client = genai.Client(api_key=load_key(".gemini_api_key"))
+        else:
+            client = OpenAI(api_key=load_key(), max_retries=3, timeout=90)
     prompt = (SCRIPT_DIR / "prompt.txt").read_text(encoding="utf-8") if client else None
     failures = 0
     for number, (box, images, dest) in enumerate(tasks, 1):
