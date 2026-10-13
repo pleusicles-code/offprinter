@@ -130,7 +130,16 @@ def verify(rec,cache,key,openalex_key,ai_mode):
         notes.append(keyname+": "+(old or "∅")+" → "+new)
     if warnings:
         return changes,"CHECK: "+"; ".join(notes+warnings),best["url"]
-    if not notes: return {},"VERIFIED CORRECT",best["url"]
+    if not notes:
+        compared=[k for k,ext in (("Year","year"),("Volume","volume"),("Issue","issue"),("Pages","pages"))
+                  if value(rec.get(k)) and value(best.get(ext))]
+        if not compared:
+            return {},"MATCHED (bibliographic numbering not independently verified)",best["url"]
+        missing=[k for k,ext in (("Year","year"),("Volume","volume"),("Issue","issue"),("Pages","pages"))
+                 if value(rec.get(k)) and not value(best.get(ext))]
+        if missing:
+            return {},"PARTIALLY VERIFIED (source lacks "+", ".join(missing)+")",best["url"]
+        return {},"VERIFIED CORRECT",best["url"]
     if all("removed terminal punctuation" in n for n in notes):
         return changes,"VERIFIED (CLEANUP): "+"; ".join(notes),best["url"]
     return changes,"VERIFIED (CORRECTED): "+"; ".join(notes),best["url"]
