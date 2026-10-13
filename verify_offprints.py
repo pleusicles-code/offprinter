@@ -5,6 +5,7 @@ from pathlib import Path
 from difflib import SequenceMatcher
 from urllib.request import Request, urlopen
 from urllib.parse import urlencode
+from html.parser import HTMLParser
 from openpyxl import load_workbook
 from openpyxl.styles import Font, PatternFill
 from openpyxl.utils import get_column_letter
@@ -92,6 +93,75 @@ def openalex(title,cache,key):
             pages=str(first)+"-"+str(last) if first and last else "",
             url=real or loc.get("landing_page_url") or item.get("id",""))
 
+class _RealLinks(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.ids = []
+    def handle_starttag(self, tag, attrs):
+        if tag != "a": return
+        href = dict(attrs).get("href", "")
+        m = re.search(r"real\\.mtak\\.hu/(\\d+)(?:/|$)", href)
+        if not m:
+            m = re.search(r"^/(\\d+)(?:/|$)", href)
+        if m and m.group(1) not in self.ids:
+            self.ids.append(m.group(1))
+
+
+def cached_text(url, cache):
+    if url in cache:
+        return cache[url]
+    req = Request(url, headers={"User-Agent": "OFFPRINTER/1.0 research bibliographic matching"})
+    with urlopen(req, timeout=25) as response:
+        text = response.read().decode("utf-8", errors="replace")
+    cache[url] = text
+    return text
+
+
+def real_search(record, cache):
+    """Search REAL directly via EPrints and fetch article-level JSON exports."""
+    title = value(record.get("Title"))
+    surname = family_name(record.get("Author_normalized") or record.get("Author"))
+    queries = []
+    if title:
+        words = re.findall(r"[^\\W_]{4,}", title, flags=re.UNICODE)
+        queries.append(" ".join(words[:4]) if words else title)
+    if surname:
+        queries.append(surname)
+    ids = []
+    for query in queries:
+        url = "https://real.mtak.hu/cgi/search/simple?" + urlencode({"q": query})
+        page = cached_text(url, cache)
+        parser = _RealLinks()
+        parser.feed(page)
+        for ident in parser.ids[:25]:
+            if ident not in ids:
+                ids.append(ident)
+        if len(ids) >= 35:
+            break
+    for ident in ids[:35]:
+        url = f"https://real.mtak.hu/cgi/export/eprint/{ident}/JSON/REAL-eprint-{ident}.js"
+        try:
+            obj = json.loads(cached_text(url, cache))
+            if isinstance(obj, list):
+                obj = obj[0] if obj else {}
+            if not isinstance(obj, dict):
+                continue
+            creators = obj.get("creators") or obj.get("creators_name") or []
+            names = []
+            for p in creators:
+                if isinstance(p, dict):
+                    n = p.get("name") if isinstance(p.get("name"),dict) else p
+                    names.append(" ".join(filter(None,(n.get("given"),n.get("family")))))
+            page = value(obj.get("pagerange") or obj.get("pages"))
+            yield dict(source="REAL", title=value(obj.get("title")),
+                       author="; ".join(names), publication=value(obj.get("publication")),
+                       year=value(obj.get("date"))[:4], volume=value(obj.get("volume")),
+                       issue=value(obj.get("number")), pages=page,
+                       url=f"https://real.mtak.hu/{ident}/")
+        except Exception:
+            continue
+
+
 def rank(rec,item):
     t=sim(rec.get("Title"),item["title"])
     a=author_sim(rec.get("Author_normalized") or rec.get("Author"),item["author"])
@@ -112,7 +182,8 @@ def ai_verdict(rec,candidate,key):
 def verify(rec,cache,key,openalex_key,ai_mode):
     candidates=[];errors=[]
     for provider in (lambda:list(crossref(value(rec.get("Title")),cache)),
-                     lambda:list(openalex(value(rec.get("Title")),cache,openalex_key))):
+                     lambda:list(openalex(value(rec.get("Title")),cache,openalex_key)),
+                     lambda:list(real_search(rec,cache))):
         try: candidates+=provider()
         except Exception as e: errors.append(str(e)[:85])
     if not candidates:
