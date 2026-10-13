@@ -95,3 +95,9 @@ High-confidence matching can update the XLSX copy's year, volume, issue or page 
 An OpenAI API key is read from the same `../.openai_api_key` file used by `offprinter.py`. Ambiguous but plausible candidate comparisons may use GPT-5.4 mini, with reasoning none. Use `--ai never` to disable OpenAI or `--ai always` to check every otherwise acceptable candidate. The script stores query responses in `../.offprinter_verify_cache.json` and reuses them; `--no-cache` disables caching. An optional independent `OPENALEX_API_KEY` environment variable may be necessary for larger workloads.
 
 For initial testing: `python verify_offprints.py ../offprints_YYYYMMDD_HHMMSS.xlsx --limit 10`. The output is a normal catalogue with inline corrections and logs, **not** a separate verification report.
+
+### Direct REAL lookups and match diagnostics
+
+The verifier now also searches the Hungarian Academy's **REAL** EPrints repository directly, using its public search interface and the structured JSON exports of candidate records; this is separate from finding REAL links via OpenAlex. REAL may have gaps, particularly where only REAL-J digitized whole volumes are available. Repository timeouts are treated as a source failure rather than evidence that an article does not exist.
+
+When the external author is absent, the similarity diagnostic reports `author not supplied` rather than counting it as a mismatch. The script still requires a strong article-title match before amending metadata. Low author similarities against unrelated search results are diagnostic of poor candidate retrieval, not proof that our own transcription is wrong.
