@@ -207,3 +207,9 @@ python offprinter.py -m gpt-5.6-terra --below-model gpt-5.4-mini --force-below 2
 ```
 
 The preview uses the **same selection function** as live extraction: prints `CREATE`, `OVERWRITE` (existing record backed up), `SKIP`, or `ERROR` for each offprint, alongside the destination JSON path and reason (confidence, cutoff, already processed, missing source). A summary counts each action. It does not contact APIs, rewrite JSON, rotate images, or generate XLSX; `fix`/`xls` operations are not simulated.
+
+## Default extraction model (October 2026)
+
+The default model when `-m/--model` is omitted, or Enter is pressed in the interactive model menu, is now **`gemini-3.8-flash`**. Use `-m gpt-5.4-mini` explicitly for the previous default. The default therefore requires `../.gemini_api_key` for JSON extraction.
+
+Legacy unsuffixed `photo.json` files remain associated with **GPT-5.4 mini** when `processing.model` is `gpt-5.4-mini` or missing; changing the default does not relabel them as Gemini Flash. Existing model-specific JSONs are unaffected.
