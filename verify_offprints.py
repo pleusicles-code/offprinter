@@ -123,7 +123,7 @@ def verify(rec,cache,key,openalex_key,ai_mode):
         return {},"UNVERIFIED (no strong author/title match)",""
     if len(ranked)>1 and overall-ranked[1][0][0]<.035:
         other=ranked[1][1]
-        same=sim(best["title"],other["title"])>.97 and author_sim(best["author"],other["author"])>.9
+        same=sim(best["title"],other["title"])>.97 and sim(best["author"].replace(",", " "),other["author"].replace(",", " "))>.9
         if not same: return {},"AMBIGUOUS (several plausible records)",best["url"]
     if key and ai_mode!="never" and (ai_mode=="always" or t<.97 or a<.94 or (j<.75 and value(rec.get("Publication")))):
         try: verdict=ai_verdict(rec,best,key)
@@ -141,7 +141,7 @@ def verify(rec,cache,key,openalex_key,ai_mode):
         if not new or old==new or norm(old)==norm(new): continue
         # Two agreeing strong records can corroborate a correction; conflicting evidence blocks it.
         support=[x for _,x in ranked if sim(rec.get("Title"),x["title"])>=.94
-                 and author_sim(rec.get("Author"),x["author"])>=.80 and value(x.get(ext))]
+                 and author_sim(rec.get("Author_normalized") or rec.get("Author"),x["author"])>=.80 and value(x.get(ext))]
         distinct={norm(x[ext]) for x in support}
         if len(distinct)>1:
             warnings.append(keyname+" conflicts across sources");continue
