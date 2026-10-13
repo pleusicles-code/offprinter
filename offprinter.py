@@ -343,18 +343,27 @@ def call_gemini(client, model, reasoning, prompt, images):
 
 
 def extract(client, model, reasoning, prompt, box, images):
-    content = [{"type": "input_text", "text": prompt}]
-    content.extend(image_content(p) for p in images)
-    response = client.responses.parse(
-        model=model,
-        reasoning={"effort": reasoning},
-        input=[{"role": "user", "content": content}],
-        text_format=Metadata,
-        store=False,
-    )
-    if response.output_parsed is None:
-        raise RuntimeError("Model did not return a structured bibliographic record")
-    data = response.output_parsed.model_dump()
+    if model == "gemini-3.8-flash":
+        parsed, input_tokens, output_tokens, cached_tokens = call_gemini(
+            client, model, reasoning, prompt, images)
+    else:
+        content = [{"type": "input_text", "text": prompt}]
+        content.extend(image_content(p) for p in images)
+        response = client.responses.parse(
+            model=model,
+            reasoning={"effort": reasoning},
+            input=[{"role": "user", "content": content}],
+            text_format=Metadata,
+            store=False,
+        )
+        if response.output_parsed is None:
+            raise RuntimeError("Model did not return a structured bibliographic record")
+        parsed = response.output_parsed
+        input_tokens = response.usage.input_tokens if response.usage else None
+        output_tokens = response.usage.output_tokens if response.usage else None
+        details = getattr(response.usage, "input_tokens_details", None) if response.usage else None
+        cached_tokens = getattr(details, "cached_tokens", 0) or 0
+    data = parsed.model_dump()
     data["author"], data["author_normalized"] = normalize_author_fields(
         data.get("author"), data.get("author_normalized"))
     if data["handwriting"] not in {"Yes", "No", "Uncertain"}:
@@ -393,10 +402,6 @@ def extract(client, model, reasoning, prompt, box, images):
         data["review_reason"] = None
     data["box"] = box.name
     data["images"] = [p.relative_to(box).as_posix() for p in images]
-    input_tokens = response.usage.input_tokens if response.usage else None
-    output_tokens = response.usage.output_tokens if response.usage else None
-    input_details = getattr(response.usage, "input_tokens_details", None) if response.usage else None
-    cached_tokens = getattr(input_details, "cached_tokens", 0) or 0
     cost_huf = calculate_cost_huf(model, input_tokens, output_tokens, cached_tokens)
     data["processing"] = {
         "model": model,
