@@ -154,3 +154,23 @@ Each new extraction is saved beside the first image as `PHOTO_STEM.MODEL_ID.json
 Existing unsuffixed files (`PHOTO_STEM.json`) are **preserved as legacy records**, never implicitly renamed or overwritten. Running another model creates an independent JSON. Ordinary skip and selective reprocessing options (`--force`, `--force-flagged`, `--force-below`) act **only on the selected model's file**; `--force` backs up that model's previous JSON as `.json.bak`. If no file exists for the selected model, its extraction runs normally even if other model or legacy records exist.
 
 XLSX export discovers **all** model-specific and legacy JSON files for each physical offprint and includes one catalogue row per JSON; use the `Model` column to filter or compare independent recognitions. Consequently, total rows in the spreadsheet may exceed the number of physical offprints. The Summary's `Records` count is of extraction records, not distinct physical objects. No merge or adjudication by a third model has been implemented yet.
+
+## Two-tier model escalation and one-row-per-offprint Excel
+
+Use `--below-model STANDARD` with `--model ADVANCED --force-below SCORE` to process **only** those offprints whose STANDARD extraction has a composite confidence strictly below SCORE. Example:
+
+```bash
+python offprinter.py -m gpt-5.4 --below-model gpt-5.4-mini --force-below 7.5
+```
+
+Standard model records remain unchanged. An already existing advanced-model JSON is preserved (not reprocessed). If the standard model record or its scores are absent, the item is skipped; old unsuffixed mini JSON can serve as the standard baseline. The advanced and standard models must be different. Without `--below-model`, `--force-below` retains its existing model-specific meaning.
+
+**XLSX now always contains at most one row per physical offprint**: choose the `--model` version if available; otherwise choose `--below-model` if supplied and available; otherwise skip that offprint. With `-o xls`, `--below-model` does not require `--force-below`:
+
+```bash
+python offprinter.py -o xls -m gpt-5.4 --below-model gpt-5.4-mini
+```
+
+The `Model` column identifies the extraction used. The `cost_huf` column is the **selected record's cost**. Summary separates **Selected cost HUF** (displayed records) from **All passes cost HUF** (all JSON variants, including legacy, for the selected physical offprints). Costs for overwritten earlier runs in `.json.bak` are not included.
+
+The earlier statement that XLSX exports one row for every model's JSON is superseded by this new one-row-per-offprint rule.
