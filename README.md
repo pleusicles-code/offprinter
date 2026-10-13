@@ -174,3 +174,11 @@ python offprinter.py -o xls -m gpt-5.4 --below-model gpt-5.4-mini
 The `Model` column identifies the extraction used. The `cost_huf` column is the **selected record's cost**. Summary separates **Selected cost HUF** (displayed records) from **All passes cost HUF** (all JSON variants, including legacy, for the selected physical offprints). Costs for overwritten earlier runs in `.json.bak` are not included.
 
 The earlier statement that XLSX exports one row for every model's JSON is superseded by this new one-row-per-offprint rule.
+
+## Percentile-based confidence selection
+
+`--force-below` now accepts either an absolute score (`--force-below 7`, strictly below 7) or a percent written with `%` (`--force-below '20%'`). For percentages, OFFPRINTER first considers **only the offprints selected by `--box` and `--limit`**, gathers the existing JSON of the source model (`--below-model` if supplied, otherwise `--model`), excludes missing/unscored JSON from the ranking, sorts ascending by composite confidence, and selects `ceil(scored_count × percent / 100)` lowest-scoring items. Ties at the cutoff are resolved deterministically in photograph traversal order; the number selected does not expand for ties.
+
+Example: `python offprinter.py -b 1-5 --limit 100 -m gpt-5.6-terra --below-model gpt-5.4-mini --force-below '20%'`. This identifies the lowest-scoring 20% of **existing scored mini JSONs** among the first 100 eligible photographs in boxes 1–5, and generates Terra JSON only for selected entries that do not already have Terra output. Existing advanced JSONs remain unchanged. Where `--below-model` is omitted, selection uses the chosen model's existing JSON, reprocesses the lowest-scoring entries with that same model, and still processes items with no existing JSON as usual.
+
+Percentile selection does not change XLSX precedence: advanced results when available, standard fallback otherwise. Numeric threshold mode remains unchanged.
