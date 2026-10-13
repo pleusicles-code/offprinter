@@ -31,8 +31,11 @@ MODEL_PRICING = {
     "gpt-6.1-sol": (2.00, 0.10, 10.00),
     "gpt-6-astra": (10.00, 1.00, 50.00),
     "gemini-3.8-flash": (0.75, 0.075, 3.75),
+    "gemini-3.1-pro-preview": (2.00, 0.20, 12.00),
+    "gemini-4-argon": (2.00, 2.00, 10.00),
 }
-MIN_REASONING_MODELS = {"gpt-6.1-sol", "gpt-6-astra", "gemini-3.8-flash"}
+GEMINI_MODELS = {"gemini-3.8-flash", "gemini-3.1-pro-preview", "gemini-4-argon"}
+MIN_REASONING_MODELS = {"gpt-6.1-sol", "gpt-6-astra"} | GEMINI_MODELS
 
 
 def calculate_cost_huf(model, input_tokens, output_tokens, cached_input_tokens=0):
@@ -351,10 +354,28 @@ def gemini_image_part(path):
         data=base64.b64decode(encoded), mime_type=mime.removeprefix("data:"))
 
 
+def resolve_gemini_model(client, model):
+    """Resolve newly launched Argon without guessing an undocumented API model ID."""
+    if model != "gemini-4-argon":
+        return model
+    found = []
+    for entry in client.models.list():
+        name = getattr(entry, "name", "") or ""
+        display = getattr(entry, "display_name", "") or ""
+        if "argon" in (name + " " + display).lower():
+            found.append(name.removeprefix("models/"))
+    if len(found) != 1:
+        raise RuntimeError(
+            "Could not uniquely resolve Gemini 4 Argon from models accessible "
+            "to this API key. Check Google AI Studio model availability; "
+            "available Argon matches: " + ", ".join(found))
+    return found[0]
+
+
 def call_gemini(client, model, reasoning, prompt, images):
     from google.genai import types
     result = client.models.generate_content(
-        model=model,
+        model=resolve_gemini_model(client, model),
         contents=[prompt] + [gemini_image_part(p) for p in images],
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
@@ -376,7 +397,7 @@ def call_gemini(client, model, reasoning, prompt, images):
 
 
 def extract(client, model, reasoning, prompt, box, images):
-    if model == "gemini-3.8-flash":
+    if model in GEMINI_MODELS:
         parsed, input_tokens, output_tokens, cached_tokens = call_gemini(
             client, model, reasoning, prompt, images)
     else:
@@ -621,8 +642,8 @@ def main():
         ap.error("--below-model must differ from --model")
     if args.below_model and args.force_below is None and "json" in operations:
         ap.error("--below-model with JSON extraction requires --force-below")
-    if args.model == "gemini-3.8-flash" and args.reasoning == "xhigh":
-        ap.error("Gemini 3.8 Flash supports low, medium or high reasoning, not xhigh")
+    if args.model in GEMINI_MODELS and args.reasoning == "xhigh":
+        ap.error("Gemini models support low, medium or high reasoning, not xhigh")
     if args.model in MIN_REASONING_MODELS and args.reasoning == "none":
         print(f"{args.model} requires reasoning; using low instead of none.")
         args.reasoning = "low"
@@ -662,7 +683,7 @@ def main():
         return
     client = None
     if "json" in operations:
-        if args.model == "gemini-3.8-flash":
+        if args.model in GEMINI_MODELS:
             from google import genai
             client = genai.Client(api_key=load_key(".gemini_api_key"))
         else:
