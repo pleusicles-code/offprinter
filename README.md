@@ -113,4 +113,22 @@ Use `--force-below SCORE` to selectively reprocess records whose composite confi
 
 The threshold is inclusive of fractional scores and must be between 1 and 10. Existing JSON records with no confidence scores are skipped; records without any JSON are processed normally. Reprocessed JSON files are backed up to `.json.bak` (only the last backup is retained) and receive new confidence scores and `flagged=false`. The options `--force`, `--force-flagged`, and `--force-below` are mutually exclusive. Choosing a model does not guarantee that the new score will be higher. For GPT-6.1 Sol, use `--reasoning low` or higher.
 
-The current `processing.cost_huf` computation supports GPT-5.4 mini only; other models store `null` rather than reporting an incorrect cost.
+The `processing.cost_huf` calculation supports every model in the supported model menu, using the fixed pricing table below.
+
+## Model menu and current pricing
+
+Run `python offprinter.py --model` (or `-m` without a value) in an interactive terminal to choose from a numbered menu. Explicit `-m MODEL_ID` still works for automation. The menu includes: `gpt-5.4-mini`, `gpt-5.4`, `gpt-5.6-terra`, `gpt-5.6-sol`, `gpt-6.1-sol`, and `gpt-6-astra`.
+
+Fixed **standard API prices** as checked 2026-10-13, in USD per million input/output tokens:
+- `gpt-5.4-mini`: 0.75 / 4.50
+- `gpt-5.4`: 2.50 / 15.00
+- `gpt-5.6-terra`: 2.00 / 12.00
+- `gpt-5.6-sol`: 4.00 / 20.00
+- `gpt-6.1-sol`: 2.00 / 10.00
+- `gpt-6-astra`: 10.00 / 50.00
+
+These prices are embedded in `offprinter.py`, not fetched at runtime. Rates also include cached-input discounts (when the API reports cached input). The fixed conversion is **330 HUF/USD**, with `cost_huf` rounded to 1 decimal. The script saves `cached_input_tokens` in new JSON records, and Excel export recalculates cost from stored token counts for supported models, including older entries lacking `cost_huf`. Pricing excludes nonstandard tiers, regional surcharges, special long-context rates and future price changes.
+
+When GPT-6.1 Sol or GPT-6 Astra is selected with the default `--reasoning none`, the script uses `low` reasoning and announces the change, since those models require reasoning. Other listed models retain the default `none`.
+
+**References:** https://developers.openai.com/api/docs/pricing and the corresponding individual model pages.
