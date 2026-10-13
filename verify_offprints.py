@@ -22,9 +22,32 @@ def sim(a,b):
     return max(SequenceMatcher(None,a,b).ratio(),
                SequenceMatcher(None," ".join(sorted(a.split()))," ".join(sorted(b.split()))).ratio())
 
-def author_sim(a,b):
-    a,b=str(a or "").split(";")[0],str(b or "").split(";")[0]
-    return sim(a.replace(","," "),b.replace(","," "))
+def family_name(normalized_author):
+    """OFFPRINTER author_normalized begins with the family name (with or without comma)."""
+    first = str(normalized_author or "").split(";")[0].strip()
+    return first.split(",", 1)[0].split()[0] if first else ""
+
+
+def author_sim(a, b):
+    """Compare a catalogue family name against all words in a repository author name."""
+    family = family_name(a)
+    candidates = str(b or "").split(";")
+    if not family or not b:
+        return 0.0
+    family_score = max(
+        (sim(family, word) for person in candidates
+         for word in re.findall(r"[^\\W_]+(?:[-'][^\\W_]+)*", person, re.UNICODE)),
+        default=0.0,
+    )
+    # The surname is the stable identifier across Hungarian / Western name order
+    # and translated or abbreviated given names. Do not allow a fuzzy full-name
+    # score to override an absent surname.
+    full_score = max(
+        (sim(str(a).split(";")[0].replace(",", " "), person.replace(",", " "))
+         for person in candidates),
+        default=0.0,
+    )
+    return 0.85 * family_score + 0.15 * full_score
 
 def value(v): return str(v).strip() if v is not None else ""
 
