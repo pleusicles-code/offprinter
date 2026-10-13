@@ -591,6 +591,48 @@ def export_xlsx(records, outfile, cost_records=None):
         row[0].number_format = '0.0 "Ft"'
     wb.save(outfile)
 
+def extraction_decision(images, dest, args, percentile_selected):
+    """Return (action, reason); shared by dry-run and actual extraction."""
+    photo = images[0]
+    if percentile_selected is not None:
+        reference = model_or_legacy_path(photo, args.below_model or args.model)
+        if reference is None and args.below_model:
+            return "skip", "standard-model JSON missing"
+        if reference is not None and photo not in percentile_selected:
+            return "skip", "outside lowest-confidence percentile"
+    if args.below_model:
+        source = model_or_legacy_path(photo, args.below_model)
+        if source is None:
+            return "skip", "standard-model JSON missing"
+        standard = json.loads(source.read_text(encoding="utf-8"))
+        if not isinstance(standard, dict):
+            raise ValueError("Standard-model JSON root is not an object")
+        score = composite_confidence(standard)
+        if score is None or (percentile_selected is None and score >= args.force_below):
+            return "skip", f"standard confidence {score}"
+        if dest.exists():
+            return "skip", f"advanced JSON already exists; standard confidence {score}"
+        return "create", f"standard confidence {score}"
+    if dest.exists():
+        if args.force:
+            return "overwrite", "forced (backup existing JSON)"
+        if not args.force_flagged and args.force_below is None:
+            return "skip", "JSON already exists"
+        existing = json.loads(dest.read_text(encoding="utf-8"))
+        if not isinstance(existing, dict):
+            raise ValueError("Existing JSON root is not an object")
+        if args.force_flagged:
+            processing = existing.get("processing") or {}
+            if not isinstance(processing, dict):
+                raise ValueError("Existing JSON processing is not an object")
+            return ("overwrite", "flagged (backup existing JSON)") if processing.get("flagged") is True else ("skip", "JSON not flagged")
+        score = composite_confidence(existing)
+        if score is None or (percentile_selected is None and score >= args.force_below):
+            return "skip", f"confidence {score}"
+        return "overwrite", f"confidence {score} (backup existing JSON)"
+    return "create", "no target-model JSON exists"
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("-b", "--box", help="box number or inclusive range (e.g. 3 or 1-5)")
@@ -678,8 +720,20 @@ def main():
               f"scored {reference_model} records in the selected boxes/limit.")
     print(f"Selected {len(boxes)} boxes, {len(tasks)} offprints; operations: {','.join(sorted(operations))}")
     if args.dry_run:
+        if "json" not in operations:
+            print("No JSON extraction requested; other operations are not simulated.")
+            return
+        counts = Counter()
         for box, ims, dest in tasks:
-            print(f"{dest.relative_to(ROOT)} <= {', '.join(p.name for p in ims)}")
+            try:
+                action, reason = extraction_decision(ims, dest, args, percentile_selected)
+            except (ValueError, OSError, TypeError) as exc:
+                action, reason = "error", str(exc)
+            counts[action] += 1
+            print(f"  {action.upper():9} {dest.relative_to(ROOT)}"
+                  f" <= {', '.join(p.name for p in ims)} — {reason}")
+        print(f"Dry run: {counts['create']} create, {counts['overwrite']} overwrite, "
+              f"{counts['skip']} skip, {counts['error']} errors; no files changed.")
         return
     client = None
     if "json" in operations:
@@ -703,51 +757,11 @@ def main():
                     continue
         if "json" in operations:
             try:
-                if percentile_selected is not None:
-                    reference = model_or_legacy_path(images[0], args.below_model or args.model)
-                    if reference is not None and images[0] not in percentile_selected:
-                        print("  outside lowest-confidence percentile; skipped")
-                        continue
-                    if reference is None and args.below_model:
-                        print("  standard-model JSON missing; skipped")
-                        continue
-                if args.below_model:
-                    standard_path = model_or_legacy_path(images[0], args.below_model)
-                    if standard_path is None:
-                        print("  standard-model JSON missing; skipped")
-                        continue
-                    standard = json.loads(standard_path.read_text(encoding="utf-8"))
-                    if not isinstance(standard, dict):
-                        raise ValueError("Standard-model JSON root is not an object")
-                    score = composite_confidence(standard)
-                    if score is None or (percentile_selected is None and score >= args.force_below):
-                        print(f"  standard confidence {score}: skipped")
-                        continue
-                    if dest.exists():
-                        print("  advanced JSON exists; skipped")
-                        continue
-                    print(f"  standard confidence {score}: escalating")
-                if dest.exists() and not args.force:
-                    if not args.force_flagged and args.force_below is None:
-                        print("  JSON exists; skipped")
-                        continue
-                    existing = json.loads(dest.read_text(encoding="utf-8"))
-                    if not isinstance(existing, dict):
-                        raise ValueError("Existing JSON root is not an object")
-                    if args.force_flagged:
-                        processing = existing.get("processing") or {}
-                        if not isinstance(processing, dict):
-                            raise ValueError("Existing JSON processing is not an object")
-                        if processing.get("flagged") is not True:
-                            print("  JSON not flagged; skipped")
-                            continue
-                        print("  flagged: reprocessing")
-                    elif args.force_below is not None:
-                        confidence = composite_confidence(existing)
-                        if confidence is None or (percentile_selected is None and confidence >= args.force_below):
-                            print(f"  confidence {confidence}: skipped")
-                            continue
-                        print(f"  confidence {confidence}: reprocessing")
+                action, reason = extraction_decision(images, dest, args, percentile_selected)
+                if action == "skip":
+                    print(f"  skipped: {reason}")
+                    continue
+                print(f"  {action}: {reason}")
                 result = extract(client, args.model, args.reasoning, prompt, box, images)
                 write_json_atomic(dest, result, backup=dest.exists())
                 print(f"  {result.get('author') or '?'} — {result.get('title') or '?'}")
