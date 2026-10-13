@@ -82,3 +82,16 @@ Newly generated JSON records include `"flagged": false` as the final key inside 
 Run `python offprinter.py --force-flagged` to process photographs with no existing JSON and reprocess **only** existing records with `processing.flagged == true`. Other JSON files are skipped. Reprocessed records are backed up to `.json.bak` and their newly generated `processing.flagged` is reset to `false`.
 
 `--force` (reprocess all) and `--force-flagged` are mutually exclusive. Existing JSON records without the new flag are treated as unflagged. No API request is made for an unflagged existing record.
+
+## Bibliographic verification (separate script)
+
+Run `python verify_offprints.py ../offprints_YYYYMMDD_HHMMSS.xlsx` inside the repository.
+This creates a copy beside the original with suffix `_verified.xlsx`, preserving all original worksheets and catalogue fields, and appending **Verification** and **Verification source** columns. The source column contains clickable links. The input workbook and the original JSON files are never modified.
+
+The verifier searches Crossref and OpenAlex for article-level metadata. OpenAlex may link to Hungarian REAL/REAL-J deposits when indexed; it does **not** query REAL directly. Names, journal titles, and titles are fuzzy matched (Unicode/accent normalization, token-order tolerance and edit similarity). A reliable author/title match is mandatory; a mismatching year or volume is never a hard search filter. Conflicting external records are flagged instead of silently reconciled.
+
+High-confidence matching can update the XLSX copy's year, volume, issue or page range; obvious trailing punctuation is cleaned from verified titles. Statuses include `VERIFIED CORRECT`, `VERIFIED (CLEANUP)`, `VERIFIED (CORRECTED)`, `PARTIALLY VERIFIED`, `POSSIBLE MATCH`, `AMBIGUOUS`, `NOT FOUND`, `UNVERIFIED`, `CHECK`, and `SEARCH ERROR`. These describe **external metadata comparison**, not inspection of the original photographs. The original workbook and JSON records are not touched.
+
+An OpenAI API key is read from the same `../.openai_api_key` file used by `offprinter.py`. Ambiguous but plausible candidate comparisons may use GPT-5.4 mini, with reasoning none. Use `--ai never` to disable OpenAI or `--ai always` to check every otherwise acceptable candidate. The script stores query responses in `../.offprinter_verify_cache.json` and reuses them; `--no-cache` disables caching. An optional independent `OPENALEX_API_KEY` environment variable may be necessary for larger workloads.
+
+For initial testing: `python verify_offprints.py ../offprints_YYYYMMDD_HHMMSS.xlsx --limit 10`. The output is a normal catalogue with inline corrections and logs, **not** a separate verification report.
