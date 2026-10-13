@@ -146,3 +146,11 @@ Gemini 3.8 Flash supports `low`, `medium`, and `high` thinking, but **not** `non
 Gemini usage is saved as `input_tokens`, `output_tokens` (answer plus thinking tokens), and `cached_input_tokens`. The fixed introductory paid API prices through December 31, 2026 are **$0.75 per million input tokens**, **$3.75 per million output/thinking tokens**, and **$0.075 per million cached input tokens**; prices increase starting January 1, 2027. The same fixed conversion of 330 HUF/USD is applied for `processing.cost_huf`. Source: https://ai.google.dev/gemini-api/docs/pricing and https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash .
 
 The Gemini pathway has been implemented against the public SDK documentation but has not yet been exercised with a live API key and offprint photograph; test a small sample before using it on an entire box.
+
+## Model-specific JSON filenames (independent recognition passes)
+
+Each new extraction is saved beside the first image as `PHOTO_STEM.MODEL_ID.json`, e.g. `20261012_121451.gpt-5.4-mini.json` and `20261012_121451.gemini-3.8-flash.json`. For two-photo offprints, both model-specific files are beside the first image in the `double/` directory.
+
+Existing unsuffixed files (`PHOTO_STEM.json`) are **preserved as legacy records**, never implicitly renamed or overwritten. Running another model creates an independent JSON. Ordinary skip and selective reprocessing options (`--force`, `--force-flagged`, `--force-below`) act **only on the selected model's file**; `--force` backs up that model's previous JSON as `.json.bak`. If no file exists for the selected model, its extraction runs normally even if other model or legacy records exist.
+
+XLSX export discovers **all** model-specific and legacy JSON files for each physical offprint and includes one catalogue row per JSON; use the `Model` column to filter or compare independent recognitions. Consequently, total rows in the spreadsheet may exceed the number of physical offprints. The Summary's `Records` count is of extraction records, not distinct physical objects. No merge or adjudication by a third model has been implemented yet.
