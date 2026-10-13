@@ -132,3 +132,17 @@ These prices are embedded in `offprinter.py`, not fetched at runtime. Rates also
 When GPT-6.1 Sol or GPT-6 Astra is selected with the default `--reasoning none`, the script uses `low` reasoning and announces the change, since those models require reasoning. Other listed models retain the default `none`.
 
 **References:** https://developers.openai.com/api/docs/pricing and the corresponding individual model pages.
+
+## Google Gemini 3.8 Flash (alternative provider)
+
+Gemini 3.8 Flash is available with `--model gemini-3.8-flash` or from the interactive `--model` menu. The default remains `gpt-5.4-mini`. Gemini uses the same `prompt.txt`, photographs, Pydantic `Metadata` schema, JSON postprocessing (including name corrections, review flags, confidence scoring, and backups), and XLSX exporter.
+
+Install the added SDK dependency with `pip install -r requirements.txt`. Obtain a **Gemini API key** from Google AI Studio and save it in a new local file `../.gemini_api_key` (alongside `../.openai_api_key`), with no quotes or extra characters. Run `chmod 600 ../.gemini_api_key`. The key is read only for Gemini; OpenAI models continue using `../.openai_api_key`.
+
+Example comparison: `python offprinter.py -b 1 --limit 3 --force -m gemini-3.8-flash --reasoning low`. Be aware that `--force` replaces the original JSON and stores only one `.json.bak` backup; preserve copies before benchmarking multiple models.
+
+Gemini 3.8 Flash supports `low`, `medium`, and `high` thinking, but **not** `none` or `xhigh`. The program converts the existing default `--reasoning none` to `low` with an informational message; explicitly requesting `xhigh` is rejected. The effective reasoning level is saved in `processing.reasoning`.
+
+Gemini usage is saved as `input_tokens`, `output_tokens` (answer plus thinking tokens), and `cached_input_tokens`. The fixed introductory paid API prices through December 31, 2026 are **$0.75 per million input tokens**, **$3.75 per million output/thinking tokens**, and **$0.075 per million cached input tokens**; prices increase starting January 1, 2027. The same fixed conversion of 330 HUF/USD is applied for `processing.cost_huf`. Source: https://ai.google.dev/gemini-api/docs/pricing and https://ai.google.dev/gemini-api/docs/models/gemini-3.8-flash .
+
+The Gemini pathway has been implemented against the public SDK documentation but has not yet been exercised with a live API key and offprint photograph; test a small sample before using it on an entire box.
