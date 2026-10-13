@@ -5,6 +5,7 @@ import base64
 from collections import Counter
 from datetime import datetime, timezone
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -579,8 +580,8 @@ def main():
                              help="reprocess and back up all existing JSON")
     force_group.add_argument("--force-flagged", action="store_true",
                              help="reprocess and back up JSON with processing.flagged=true")
-    force_group.add_argument("--force-below", type=float, metavar="SCORE",
-                             help="reprocess JSON only if composite confidence is strictly below SCORE (1-10)")
+    force_group.add_argument("--force-below", metavar="SCORE_OR_PERCENT",
+                             help="reprocess below score 1-10 or lowest percentage e.g. 20%")
     ap.add_argument("-m", "--model", nargs="?", const="__MENU__", default=DEFAULT_MODEL,
                     help="API model ID; omit value to choose interactively")
     ap.add_argument("--below-model", choices=tuple(MODEL_PRICING),
@@ -595,8 +596,20 @@ def main():
         ap.error("operations must be fix,json,xls in any combination")
     if args.limit is not None and args.limit < 1:
         ap.error("--limit must be positive")
-    if args.force_below is not None and not 1 <= args.force_below <= 10:
-        ap.error("--force-below must be between 1 and 10")
+    percentile = None
+    if args.force_below is not None:
+        raw = args.force_below.strip()
+        try:
+            if raw.endswith("%"):
+                percentile = float(raw[:-1])
+                if not math.isfinite(percentile) or not 0 < percentile <= 100:
+                    raise ValueError
+            else:
+                args.force_below = float(raw)
+                if not math.isfinite(args.force_below) or not 1 <= args.force_below <= 10:
+                    raise ValueError
+        except ValueError:
+            ap.error("--force-below must be a score from 1 to 10 or a percentage 0%-100%")
     if args.model == "__MENU__":
         try:
             args.model = choose_model()
@@ -620,6 +633,28 @@ def main():
              for box in boxes for ims, photo in units(box)]
     if args.limit:
         tasks = tasks[:args.limit]
+    percentile_selected = None
+    if percentile is not None and "json" in operations:
+        eligible = []
+        reference_model = args.below_model or args.model
+        for _, images, _ in tasks:
+            source = model_or_legacy_path(images[0], reference_model)
+            if source is None:
+                continue
+            try:
+                item = json.loads(source.read_text(encoding="utf-8"))
+                if not isinstance(item, dict):
+                    raise ValueError("JSON root must be an object")
+                score = composite_confidence(item)
+                if score is not None:
+                    eligible.append((score, images[0]))
+            except (ValueError, OSError) as exc:
+                ap.error(f"Cannot rank {source}: {exc}")
+        count = math.ceil(len(eligible) * percentile / 100)
+        eligible.sort(key=lambda entry: entry[0])
+        percentile_selected = {photo for _, photo in eligible[:count]}
+        print(f"Lowest {percentile:g}%: selected {count} of {len(eligible)} "
+              f"scored {reference_model} records in the selected boxes/limit.")
     print(f"Selected {len(boxes)} boxes, {len(tasks)} offprints; operations: {','.join(sorted(operations))}")
     if args.dry_run:
         for box, ims, dest in tasks:
@@ -647,6 +682,14 @@ def main():
                     continue
         if "json" in operations:
             try:
+                if percentile_selected is not None:
+                    reference = model_or_legacy_path(images[0], args.below_model or args.model)
+                    if reference is not None and images[0] not in percentile_selected:
+                        print("  outside lowest-confidence percentile; skipped")
+                        continue
+                    if reference is None and args.below_model:
+                        print("  standard-model JSON missing; skipped")
+                        continue
                 if args.below_model:
                     standard_path = model_or_legacy_path(images[0], args.below_model)
                     if standard_path is None:
@@ -656,13 +699,13 @@ def main():
                     if not isinstance(standard, dict):
                         raise ValueError("Standard-model JSON root is not an object")
                     score = composite_confidence(standard)
-                    if score is None or score >= args.force_below:
+                    if score is None or (percentile_selected is None and score >= args.force_below):
                         print(f"  standard confidence {score}: skipped")
                         continue
                     if dest.exists():
                         print("  advanced JSON exists; skipped")
                         continue
-                    print(f"  standard confidence {score} below {args.force_below}: escalating")
+                    print(f"  standard confidence {score}: escalating")
                 if dest.exists() and not args.force:
                     if not args.force_flagged and args.force_below is None:
                         print("  JSON exists; skipped")
@@ -680,10 +723,10 @@ def main():
                         print("  flagged: reprocessing")
                     elif args.force_below is not None:
                         confidence = composite_confidence(existing)
-                        if confidence is None or confidence >= args.force_below:
+                        if confidence is None or (percentile_selected is None and confidence >= args.force_below):
                             print(f"  confidence {confidence}: skipped")
                             continue
-                        print(f"  confidence {confidence} below {args.force_below}: reprocessing")
+                        print(f"  confidence {confidence}: reprocessing")
                 result = extract(client, args.model, args.reasoning, prompt, box, images)
                 write_json_atomic(dest, result, backup=dest.exists())
                 print(f"  {result.get('author') or '?'} — {result.get('title') or '?'}")
