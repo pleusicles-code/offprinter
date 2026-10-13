@@ -164,9 +164,9 @@ def real_search(record, cache):
 
 def rank(rec,item):
     t=sim(rec.get("Title"),item["title"])
-    a=author_sim(rec.get("Author_normalized") or rec.get("Author"),item["author"])
+    a=author_sim(rec.get("Author_normalized") or rec.get("Author"),item["author"]) if value(item["author"]) else None
     j=sim(rec.get("Publication"),item["publication"])
-    return (.76*t+.19*a+.05*j,t,a,j)
+    return ((.76*t+.19*a+.05*j) if a is not None else (.94*t+.06*j),t,a,j)
 
 def ai_verdict(rec,candidate,key):
     from openai import OpenAI
@@ -192,17 +192,17 @@ def verify(rec,cache,key,openalex_key,ai_mode):
     (overall,t,a,j),best=ranked[0]
     # Discovery threshold: intentionally permissive. This only admits a
     # candidate for further checking; it does not authorize corrections.
-    if t < .78 or (value(rec.get("Author")) and a < .65) or overall < .76:
-        return {}, f"UNVERIFIED (best candidate: title {t:.0%}, author {a:.0%}, score {overall:.0%})", best["url"]
+    if t < .78 or (value(rec.get("Author")) and a is not None and a < .65) or overall < .76:
+        return {}, f"UNVERIFIED (best candidate: title {t:.0%}, author {(f"{a:.0%}" if a is not None else "not supplied")}, score {overall:.0%})", best["url"]
     if len(ranked)>1 and overall-ranked[1][0][0]<.035:
         other=ranked[1][1]
         same=sim(best["title"],other["title"])>.97 and sim(best["author"].replace(",", " "),other["author"].replace(",", " "))>.9
         if not same: return {},"AMBIGUOUS (several plausible records)",best["url"]
-    if key and ai_mode!="never" and (ai_mode=="always" or t<.97 or a<.94 or (j<.75 and value(rec.get("Publication")))):
+    if key and ai_mode!="never" and (ai_mode=="always" or t<.97 or (a is not None and a<.94) or (j<.75 and value(rec.get("Publication")))):
         try: verdict=ai_verdict(rec,best,key)
         except Exception as e: return {},"UNVERIFIED (AI comparison failed)",best["url"]
         if verdict!="SAME": return {},"UNVERIFIED (AI: "+verdict+")",best["url"]
-    if t<.94 or overall<.91 or (value(rec.get("Author")) and a<.82):
+    if t<.94 or overall<.91 or (value(rec.get("Author")) and a is not None and a<.82):
         return {},"POSSIBLE MATCH (not safe to change)",best["url"]
     changes={}; notes=[]; warnings=[]
     title=value(rec.get("Title"))
@@ -214,7 +214,7 @@ def verify(rec,cache,key,openalex_key,ai_mode):
         if not new or old==new or norm(old)==norm(new): continue
         # Two agreeing strong records can corroborate a correction; conflicting evidence blocks it.
         support=[x for _,x in ranked if sim(rec.get("Title"),x["title"])>=.94
-                 and author_sim(rec.get("Author_normalized") or rec.get("Author"),x["author"])>=.80 and value(x.get(ext))]
+                 and (not value(x["author"]) or author_sim(rec.get("Author_normalized") or rec.get("Author"),x["author"])>=.80) and value(x.get(ext))]
         distinct={norm(x[ext]) for x in support}
         if len(distinct)>1:
             warnings.append(keyname+" conflicts across sources");continue
