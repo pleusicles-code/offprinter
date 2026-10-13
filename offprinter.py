@@ -442,7 +442,7 @@ HEADERS = [
 ]
 
 
-def export_xlsx(records, outfile):
+def export_xlsx(records, outfile, cost_records=None):
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
     from openpyxl.utils import get_column_letter
@@ -511,20 +511,29 @@ def export_xlsx(records, outfile):
             else 13 if name == "Box" else 20
         )
 
+    expense = Counter()
+    expense_n = Counter()
+    for path, item in (cost_records if cost_records is not None else records):
+        box_name = item.get("box") or (path.parent.parent.name if path.parent.name == "double" else path.parent.name)
+        amount = estimate_cost(item)
+        if amount is not None:
+            expense[box_name] += amount
+            expense_n[box_name] += 1
+
     stats = wb.create_sheet("Summary")
     cols = ["Box", "Records", "Single", "Double", "Needs review", "Handwriting yes",
-            "Missing date", "Cost HUF", "Priced items"]
+            "Missing date", "Selected cost HUF", "Selected priced", "All passes cost HUF", "All passes priced"]
     stats.append(cols)
     total = {k: 0 for k in ("single", "double", "review", "handwriting", "missing_date", "cost", "priced")}
     for box, count in sorted(summary.items()):
         v = summary_stats[box]
         stats.append([box, count, v["single"], v["double"], v["review"],
-                      v["handwriting"], v["missing_date"], round(v["cost"], 1), v["priced"]])
+                      v["handwriting"], v["missing_date"], round(v["cost"], 1), v["priced"], round(expense[box], 1), expense_n[box]])
         for k in total:
             total[k] += v[k]
     stats.append(["TOTAL", len(records), total["single"], total["double"],
                   total["review"], total["handwriting"], total["missing_date"],
-                  round(total["cost"], 1), total["priced"]])
+                  round(total["cost"], 1), total["priced"], round(sum(expense.values()), 1), sum(expense_n.values())])
     for cell in stats[1]:
         cell.fill = PatternFill("solid", fgColor="23445A")
         cell.font = Font(bold=True, color="FFFFFF")
@@ -535,8 +544,9 @@ def export_xlsx(records, outfile):
         for row in sheet.iter_rows(min_row=2):
             for cell in row:
                 cell.border = Border(bottom=Side(style="hair", color="CDD5DD"))
-    for row in stats.iter_rows(min_row=2, min_col=8, max_col=8):
-        row[0].number_format = '#,##0.0 "Ft"'
+    for col in (8, 10):
+        for row in stats.iter_rows(min_row=2, min_col=col, max_col=col):
+            row[0].number_format = '#,##0.0 "Ft"'
     for row in sh.iter_rows(min_row=2, min_col=len(HEADERS), max_col=len(HEADERS)):
         row[0].number_format = '0.0 "Ft"'
     wb.save(outfile)
@@ -555,6 +565,8 @@ def main():
                              help="reprocess JSON only if composite confidence is strictly below SCORE (1-10)")
     ap.add_argument("-m", "--model", nargs="?", const="__MENU__", default=DEFAULT_MODEL,
                     help="API model ID; omit value to choose interactively")
+    ap.add_argument("--below-model", choices=tuple(MODEL_PRICING),
+                    help="standard model for confidence-based escalation and XLSX fallback")
     ap.add_argument("--reasoning", choices=("none", "low", "medium", "high", "xhigh"), default="none",
                     help="model reasoning effort (default: none)")
     ap.add_argument("--limit", type=int, help="maximum offprints to process (testing)")
@@ -574,6 +586,10 @@ def main():
             ap.error(str(exc))
     if args.model not in MODEL_PRICING:
         ap.error("Unknown model; run --model without a value to see supported models")
+    if args.below_model == args.model:
+        ap.error("--below-model must differ from --model")
+    if args.below_model and args.force_below is None and "json" in operations:
+        ap.error("--below-model with JSON extraction requires --force-below")
     if args.model == "gemini-3.8-flash" and args.reasoning == "xhigh":
         ap.error("Gemini 3.8 Flash supports low, medium or high reasoning, not xhigh")
     if args.model in MIN_REASONING_MODELS and args.reasoning == "none":
@@ -613,6 +629,22 @@ def main():
                     continue
         if "json" in operations:
             try:
+                if args.below_model:
+                    standard_path = model_json_path(images[0], args.below_model)
+                    if not standard_path.exists():
+                        print("  standard-model JSON missing; skipped")
+                        continue
+                    standard = json.loads(standard_path.read_text(encoding="utf-8"))
+                    if not isinstance(standard, dict):
+                        raise ValueError("Standard-model JSON root is not an object")
+                    score = composite_confidence(standard)
+                    if score is None or score >= args.force_below:
+                        print(f"  standard confidence {score}: skipped")
+                        continue
+                    if dest.exists():
+                        print("  advanced JSON exists; skipped")
+                        continue
+                    print(f"  standard confidence {score} below {args.force_below}: escalating")
                 if dest.exists() and not args.force:
                     if not args.force_flagged and args.force_below is None:
                         print("  JSON exists; skipped")
@@ -643,22 +675,34 @@ def main():
         # Avoid artificial waits; SDK handles transient API retries.
     if "xls" in operations:
         records = []
+        all_cost_records = []
         selected_photos = {ims[0] for _, ims, _ in tasks}
         for box in boxes:
             for images, first_photo in units(box):
                 if first_photo not in selected_photos:
                     continue
+                advanced = model_json_path(first_photo, args.model)
+                standard = model_json_path(first_photo, args.below_model) if args.below_model else None
+                chosen = advanced if advanced.exists() else (
+                    standard if standard is not None and standard.exists() else None)
+                # Legacy JSON is used only for the default model, and only
+                # when it explicitly identifies that model (or lacks model info).
+                legacy = first_photo.with_suffix(".json")
+                if chosen is None and args.model == DEFAULT_MODEL and legacy.exists():
+                    chosen = legacy
                 for dest in existing_json_paths(first_photo):
                     try:
                         data = json.loads(dest.read_text(encoding="utf-8"))
                         if not isinstance(data, dict):
                             raise ValueError("JSON root is not an object")
-                        records.append((dest, data))
+                        all_cost_records.append((dest, data))
+                        if dest == chosen:
+                            records.append((dest, data))
                     except Exception as exc:
                         failures += 1
                         print(f"ERROR reading {dest}: {exc}", file=sys.stderr)
         outfile = ROOT / f"offprints_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-        export_xlsx(records, outfile)
+        export_xlsx(records, outfile, all_cost_records)
         print(f"Wrote {outfile.name}: {len(records)} records")
     print(f"Done; errors: {failures}")
     if failures:
