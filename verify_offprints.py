@@ -119,8 +119,10 @@ def verify(rec,cache,key,openalex_key,ai_mode):
         return {},("SEARCH ERROR: "+"; ".join(errors) if errors else "NOT FOUND"),""
     ranked=sorted([(rank(rec,c),c) for c in candidates],key=lambda x:x[0][0],reverse=True)
     (overall,t,a,j),best=ranked[0]
-    if t<.90 or (value(rec.get("Author")) and a<.76) or overall<.88:
-        return {},"UNVERIFIED (no strong author/title match)",""
+    # Discovery threshold: intentionally permissive. This only admits a
+    # candidate for further checking; it does not authorize corrections.
+    if t < .78 or (value(rec.get("Author")) and a < .65) or overall < .76:
+        return {}, f"UNVERIFIED (best candidate: title {t:.0%}, author {a:.0%}, score {overall:.0%})", best["url"]
     if len(ranked)>1 and overall-ranked[1][0][0]<.035:
         other=ranked[1][1]
         same=sim(best["title"],other["title"])>.97 and sim(best["author"].replace(",", " "),other["author"].replace(",", " "))>.9
@@ -129,7 +131,7 @@ def verify(rec,cache,key,openalex_key,ai_mode):
         try: verdict=ai_verdict(rec,best,key)
         except Exception as e: return {},"UNVERIFIED (AI comparison failed)",best["url"]
         if verdict!="SAME": return {},"UNVERIFIED (AI: "+verdict+")",best["url"]
-    if t<.96 or overall<.94 or (value(rec.get("Author")) and a<.85):
+    if t<.94 or overall<.91 or (value(rec.get("Author")) and a<.82):
         return {},"POSSIBLE MATCH (not safe to change)",best["url"]
     changes={}; notes=[]; warnings=[]
     title=value(rec.get("Title"))
