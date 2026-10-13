@@ -182,3 +182,18 @@ The earlier statement that XLSX exports one row for every model's JSON is supers
 Example: `python offprinter.py -b 1-5 --limit 100 -m gpt-5.6-terra --below-model gpt-5.4-mini --force-below '20%'`. This identifies the lowest-scoring 20% of **existing scored mini JSONs** among the first 100 eligible photographs in boxes 1–5, and generates Terra JSON only for selected entries that do not already have Terra output. Existing advanced JSONs remain unchanged. Where `--below-model` is omitted, selection uses the chosen model's existing JSON, reprocesses the lowest-scoring entries with that same model, and still processes items with no existing JSON as usual.
 
 Percentile selection does not change XLSX precedence: advanced results when available, standard fallback otherwise. Numeric threshold mode remains unchanged.
+
+## Additional Gemini advanced models
+
+The interactive model menu also offers:
+- `gemini-3.1-pro-preview` — confirmed Google Gemini API model ID, **$2 input / $12 output / $0.20 cached input** per million tokens for OFFPRINTER-sized requests (under 200,000 input tokens).
+- `gemini-4-argon` — OFFPRINTER selection alias, with the reported introductory **$2 input / $10 output** per million tokens (October 2026). Google's publicly documented API identifier is not yet confirmed. The script searches the models accessible to your Google API key for exactly one Argon model and uses its actual ID. If unavailable or ambiguous, extraction fails explicitly without creating a JSON record. Cached input is conservatively charged at the full $2 rate until an official discounted rate is established. Introductory pricing may change after November 30, 2026.
+
+Both models use `../.gemini_api_key`, the shared Gemini extraction code and the original `prompt.txt`. `--reasoning low`, `medium`, and `high` are accepted; for Argon the precise model capabilities still require a live test. These models have not yet been exercised end-to-end in this repository. Examples:
+
+```bash
+python offprinter.py -b 1 --limit 3 -m gemini-3.1-pro-preview --reasoning low
+python offprinter.py -b 1 --limit 3 -m gemini-4-argon --reasoning low
+```
+
+The pricing constants are fixed estimates; Google's official pricing documentation may change. For Pro Preview, requests larger than 200k tokens have higher rates, which the simple OFFPRINTER pricing table does not model.
