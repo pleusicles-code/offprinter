@@ -29,8 +29,9 @@ MODEL_PRICING = {
     "gpt-5.6-sol": (4.00, 0.40, 20.00),
     "gpt-6.1-sol": (2.00, 0.10, 10.00),
     "gpt-6-astra": (10.00, 1.00, 50.00),
+    "gemini-3.8-flash": (0.75, 0.075, 3.75),
 }
-MIN_REASONING_MODELS = {"gpt-6.1-sol", "gpt-6-astra"}
+MIN_REASONING_MODELS = {"gpt-6.1-sol", "gpt-6-astra", "gemini-3.8-flash"}
 
 
 def calculate_cost_huf(model, input_tokens, output_tokens, cached_input_tokens=0):
@@ -193,8 +194,8 @@ def image_content(path):
             "detail": "high"}
 
 
-def load_key():
-    path = ROOT / ".openai_api_key"
+def load_key(filename=".openai_api_key"):
+    path = ROOT / filename
     if not path.is_file():
         raise FileNotFoundError(f"Create local API key file: {path}")
     key = path.read_text(encoding="utf-8").strip()
@@ -305,6 +306,40 @@ def normalize_author_fields(author, normalized):
         if normalized.count(",") == 1 and normalized.replace(",", "").split() == author.split():
             normalized = normalized.replace(",", "", 1).strip()
     return author, normalized
+
+
+
+def gemini_image_part(path):
+    """Use the existing image conversion, including TIFF to JPEG."""
+    from google.genai import types
+    image = image_content(path)
+    mime, encoded = image["image_url"].split(";base64,", 1)
+    return types.Part.from_bytes(
+        data=base64.b64decode(encoded), mime_type=mime.removeprefix("data:"))
+
+
+def call_gemini(client, model, reasoning, prompt, images):
+    from google.genai import types
+    result = client.models.generate_content(
+        model=model,
+        contents=[prompt] + [gemini_image_part(p) for p in images],
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=Metadata,
+            thinking_config=types.ThinkingConfig(thinking_level=reasoning),
+        ),
+    )
+    if not result.text:
+        raise RuntimeError("Gemini returned no JSON response")
+    parsed = Metadata.model_validate_json(result.text)
+    usage = result.usage_metadata
+    input_tokens = getattr(usage, "prompt_token_count", None) if usage else None
+    output_tokens = (
+        (getattr(usage, "candidates_token_count", 0) or 0)
+        + (getattr(usage, "thoughts_token_count", 0) or 0)
+    ) if usage else None
+    cached_tokens = (getattr(usage, "cached_content_token_count", 0) or 0) if usage else 0
+    return parsed, input_tokens, output_tokens, cached_tokens
 
 
 def extract(client, model, reasoning, prompt, box, images):
