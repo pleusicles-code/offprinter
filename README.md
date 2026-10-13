@@ -197,3 +197,13 @@ python offprinter.py -b 1 --limit 3 -m gemini-4-argon --reasoning low
 ```
 
 The pricing constants are fixed estimates; Google's official pricing documentation may change. For Pro Preview, requests larger than 200k tokens have higher rates, which the simple OFFPRINTER pricing table does not model.
+
+## Accurate JSON dry-run preview
+
+Use `--dry-run` with any JSON extraction selection, including a percentile:
+
+```bash
+python offprinter.py -m gpt-5.6-terra --below-model gpt-5.4-mini --force-below 20% --dry-run
+```
+
+The preview uses the **same selection function** as live extraction: prints `CREATE`, `OVERWRITE` (existing record backed up), `SKIP`, or `ERROR` for each offprint, alongside the destination JSON path and reason (confidence, cutoff, already processed, missing source). A summary counts each action. It does not contact APIs, rewrite JSON, rotate images, or generate XLSX; `fix`/`xls` operations are not simulated.
