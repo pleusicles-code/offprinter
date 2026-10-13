@@ -20,8 +20,51 @@ ROOT = SCRIPT_DIR.parent
 EXTENSIONS = {".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp"}
 DEFAULT_MODEL = "gpt-5.4-mini"
 HUF_PER_USD = 330.0
-GPT54_MINI_INPUT_USD_PER_MILLION = 0.75
-GPT54_MINI_OUTPUT_USD_PER_MILLION = 4.50
+# Standard API token prices (USD / 1M tokens), fixed as of 2026-10-13.
+# Tuple: regular input, cached input, output. Review periodically.
+MODEL_PRICING = {
+    "gpt-5.4-mini": (0.75, 0.075, 4.50),
+    "gpt-5.4": (2.50, 0.25, 15.00),
+    "gpt-5.6-terra": (2.00, 0.20, 12.00),
+    "gpt-5.6-sol": (4.00, 0.40, 20.00),
+    "gpt-6.1-sol": (2.00, 0.10, 10.00),
+    "gpt-6-astra": (10.00, 1.00, 50.00),
+}
+MIN_REASONING_MODELS = {"gpt-6.1-sol", "gpt-6-astra"}
+
+
+def calculate_cost_huf(model, input_tokens, output_tokens, cached_input_tokens=0):
+    rates = MODEL_PRICING.get(model)
+    if rates is None or not isinstance(input_tokens, int) or not isinstance(output_tokens, int):
+        return None
+    if not isinstance(cached_input_tokens, int) or not 0 <= cached_input_tokens <= input_tokens:
+        cached_input_tokens = 0
+    normal, cached, output = rates
+    usd = ((input_tokens - cached_input_tokens) * normal
+           + cached_input_tokens * cached + output_tokens * output) / 1_000_000
+    return round(usd * HUF_PER_USD, 1)
+
+
+def choose_model():
+    print("Select API model (standard USD per million tokens):", flush=True)
+    names = list(MODEL_PRICING)
+    for i, name in enumerate(names, 1):
+        inp, _, out = MODEL_PRICING[name]
+        print(f"  {i}. {name:<17} input ${inp:g} / output ${out:g}", flush=True)
+    if not sys.stdin.isatty():
+        raise ValueError("--model without a value requires an interactive terminal")
+    while True:
+        try:
+            answer = input(f"Model [1-{len(names)}] (Enter for {DEFAULT_MODEL}): ").strip()
+        except EOFError as exc:
+            raise ValueError("No model selected") from exc
+        if not answer:
+            return DEFAULT_MODEL
+        if answer.isdigit() and 1 <= int(answer) <= len(names):
+            return names[int(answer) - 1]
+        if answer in MODEL_PRICING:
+            return answer
+        print("Invalid selection; enter a number from the list.", flush=True)
 
 
 class ReviewedWork(BaseModel):
@@ -238,13 +281,11 @@ def composite_confidence(item):
 
 def estimate_cost(item):
     usage = item.get("processing") or {}
-    if isinstance(usage.get("cost_huf"), (int, float)):
-        return round(usage["cost_huf"], 1)
-    i, o = usage.get("input_tokens"), usage.get("output_tokens")
-    if usage.get("model") != DEFAULT_MODEL or not isinstance(i, int) or not isinstance(o, int):
-        return None
-    return round((i * GPT54_MINI_INPUT_USD_PER_MILLION
-                  + o * GPT54_MINI_OUTPUT_USD_PER_MILLION) * HUF_PER_USD / 1_000_000, 1)
+    computed = calculate_cost_huf(
+        usage.get("model"), usage.get("input_tokens"), usage.get("output_tokens"),
+        usage.get("cached_input_tokens", 0))
+    return computed if computed is not None else (
+        round(usage["cost_huf"], 1) if isinstance(usage.get("cost_huf"), (int, float)) else None)
 
 
 def normalize_author_fields(author, normalized):
@@ -319,20 +360,16 @@ def extract(client, model, reasoning, prompt, box, images):
     data["images"] = [p.relative_to(box).as_posix() for p in images]
     input_tokens = response.usage.input_tokens if response.usage else None
     output_tokens = response.usage.output_tokens if response.usage else None
-    # Fixed project pricing; no live FX lookup. Other models have different rates.
-    cost_huf = None
-    if model == DEFAULT_MODEL and input_tokens is not None and output_tokens is not None:
-        cost_usd = (
-            input_tokens * GPT54_MINI_INPUT_USD_PER_MILLION
-            + output_tokens * GPT54_MINI_OUTPUT_USD_PER_MILLION
-        ) / 1_000_000
-        cost_huf = round(cost_usd * HUF_PER_USD, 1)
+    input_details = getattr(response.usage, "input_tokens_details", None) if response.usage else None
+    cached_tokens = getattr(input_details, "cached_tokens", 0) or 0
+    cost_huf = calculate_cost_huf(model, input_tokens, output_tokens, cached_tokens)
     data["processing"] = {
         "model": model,
         "reasoning": reasoning,
         "processed_at": datetime.now(timezone.utc).isoformat(),
         "input_tokens": input_tokens,
         "output_tokens": output_tokens,
+        "cached_input_tokens": cached_tokens,
         "cost_huf": cost_huf,
         "flagged": False,
     }
@@ -462,7 +499,8 @@ def main():
                              help="reprocess and back up JSON with processing.flagged=true")
     force_group.add_argument("--force-below", type=float, metavar="SCORE",
                              help="reprocess JSON only if composite confidence is strictly below SCORE (1-10)")
-    ap.add_argument("-m", "--model", default=DEFAULT_MODEL)
+    ap.add_argument("-m", "--model", nargs="?", const="__MENU__", default=DEFAULT_MODEL,
+                    help="API model ID; omit value to choose interactively")
     ap.add_argument("--reasoning", choices=("none", "low", "medium", "high", "xhigh"), default="none",
                     help="model reasoning effort (default: none)")
     ap.add_argument("--limit", type=int, help="maximum offprints to process (testing)")
@@ -475,6 +513,16 @@ def main():
         ap.error("--limit must be positive")
     if args.force_below is not None and not 1 <= args.force_below <= 10:
         ap.error("--force-below must be between 1 and 10")
+    if args.model == "__MENU__":
+        try:
+            args.model = choose_model()
+        except ValueError as exc:
+            ap.error(str(exc))
+    if args.model not in MODEL_PRICING:
+        ap.error("Unknown model; run --model without a value to see supported models")
+    if args.model in MIN_REASONING_MODELS and args.reasoning == "none":
+        print(f"{args.model} requires reasoning; using low instead of none.")
+        args.reasoning = "low"
     boxes = selected_boxes(ROOT, args.box)
     if not boxes:
         ap.error("No BoxXXX folders found beside offprinter.py")
